@@ -1,0 +1,109 @@
+// Prisma 5/7 compatible schema
+// No enums per user request
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id_usuario   Int      @id @default(autoincrement())
+  nombre       String
+  email        String   @unique
+  contrasena   String
+  imagen       String?  // optional
+
+  // FK
+  id_rol       Int
+  rol          Roles    @relation(fields: [id_rol], references: [id_rol])
+
+  // m:n with AdultoMayor via join table
+  usuariosAdultoMayor UsuarioAdultoMayor[]
+
+  @@map("Usuario")
+}
+
+model AdultoMayor {
+  id_adulto      Int       @id @default(autoincrement())
+  nombre         String
+  fecha_nacimiento DateTime
+  direccion      String
+
+  // FK to Dispositivo
+  id_dispositivo Int
+  dispositivo    Dispositivo @relation(fields: [id_dispositivo], references: [id_dispositivo])
+
+  notificaciones Notificaciones[]
+  usuariosAdultoMayor UsuarioAdultoMayor[]
+
+  @@map("AdultoMayor")
+}
+
+model Dispositivo {
+  id_dispositivo Int @id @default(autoincrement())
+  bateria        Int
+
+  adultos AdultoMayor[]
+
+  @@map("Dispositivo")
+}
+
+model Notificaciones {
+  id_notificacion Int      @id @default(autoincrement())
+  id_adulto       Int
+  adulto          AdultoMayor @relation(fields: [id_adulto], references: [id_adulto])
+
+  tipo           String
+  fecha_hora     DateTime
+  pulso          Int?
+  mensaje        String?
+
+  @@map("Notificaciones")
+}
+
+model Roles {
+  id_rol      Int     @id @default(autoincrement())
+  nombre_rol  String
+  descripcion String?
+
+  usuarios Usuario[]
+  rolesPermisos RolesPermisos[]
+
+  @@map("Roles")
+}
+
+model Permisos {
+  id_permiso     Int    @id @default(autoincrement())
+  nombre_permiso String
+  descripcion    String?
+
+  rolesPermisos RolesPermisos[]
+
+  @@map("Permisos")
+}
+
+model RolesPermisos {
+  id_rol     Int
+  id_permiso Int
+
+  rol     Roles    @relation(fields: [id_rol], references: [id_rol])
+  permiso Permisos @relation(fields: [id_permiso], references: [id_permiso])
+
+  @@id([id_rol, id_permiso])
+  @@map("RolesPermisos")
+}
+
+model UsuarioAdultoMayor {
+  id_usuario Int
+  id_adulto  Int
+
+  usuario Usuario     @relation(fields: [id_usuario], references: [id_usuario])
+  adulto  AdultoMayor @relation(fields: [id_adulto], references: [id_adulto])
+
+  @@id([id_usuario, id_adulto])
+  @@map("Usuario-AdultoMayor")
+}
