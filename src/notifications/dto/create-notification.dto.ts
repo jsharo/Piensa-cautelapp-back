@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsDateString, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsNumber, IsIn } from 'class-validator';
 
 // Alineado al modelo Prisma `Notificaciones`
 export class CreateNotificationDto {
@@ -6,7 +6,8 @@ export class CreateNotificationDto {
   id_adulto: number;
 
   @IsString()
-  tipo: string;
+  @IsIn(['EMERGENCIA', 'AYUDA'])
+  tipo: 'EMERGENCIA' | 'AYUDA';
 
   @IsOptional()
   @IsDateString()

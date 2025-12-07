@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsInt } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
 export class CreateUserDto {
 	@IsString()
@@ -11,8 +11,4 @@ export class CreateUserDto {
 	@IsString()
 	@IsNotEmpty()
 	contrasena: string;
-
-	@IsOptional()
-	@IsInt()
-	id_rol?: number;
 }

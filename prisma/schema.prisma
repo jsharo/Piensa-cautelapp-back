@@ -46,6 +46,7 @@ model AdultoMayor {
 model Dispositivo {
   id_dispositivo Int @id @default(autoincrement())
   bateria        Int
+  mac_address    String? @unique
 
   adultos AdultoMayor[]
 

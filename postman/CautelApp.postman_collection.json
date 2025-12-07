@@ -1,0 +1,173 @@
+{
+  "info": {
+    "name": "CautelApp",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth / Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"Admin123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('jwt', json.access_token);",
+              "pm.test('Status 200', function () { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User / Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/user", "host": ["{{baseUrl}}"], "path": ["user"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nombre\": \"Cuidador Demo\",\n  \"email\": \"cuidador@example.com\",\n  \"contrasena\": \"ClaveSegura123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201/200', function () { pm.expect([200,201]).to.include(pm.response.code); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User / List",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/user", "host": ["{{baseUrl}}"], "path": ["user"] }
+      },
+      "event": [
+        {"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status 200', function () { pm.response.to.have.status(200); });"]}}
+      ]
+    },
+    {
+      "name": "User / Get By Id",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/user/{{userId}}", "host": ["{{baseUrl}}"], "path": ["user","{{userId}}"] }
+      }
+    },
+    {
+      "name": "User / Update",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/user/{{userId}}", "host": ["{{baseUrl}}"], "path": ["user","{{userId}}"] },
+        "body": { "mode": "raw", "raw": "{\n  \"nombre\": \"Actualizado\"\n}" }
+      }
+    },
+    {
+      "name": "User / Delete",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/user/{{userId}}", "host": ["{{baseUrl}}"], "path": ["user","{{userId}}"] }
+      }
+    },
+    {
+      "name": "Device / Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/device", "host": ["{{baseUrl}}"], "path": ["device"] },
+        "body": { "mode": "raw", "raw": "{\n  \"mac_address\": \"AA:BB:CC:DD:EE:01\",\n  \"bateria\": 75\n}" }
+      }
+    },
+    {
+      "name": "Device / List",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/device", "host": ["{{baseUrl}}"], "path": ["device"] }
+      }
+    },
+    {
+      "name": "Device / Get By Id",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/device/{{deviceId}}", "host": ["{{baseUrl}}"], "path": ["device","{{deviceId}}"] }
+      }
+    },
+    {
+      "name": "Device / Update",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/device/{{deviceId}}", "host": ["{{baseUrl}}"], "path": ["device","{{deviceId}}"] },
+        "body": { "mode": "raw", "raw": "{\n  \"bateria\": 90,\n  \"mac_address\": \"AA:BB:CC:DD:EE:02\"\n}" }
+      }
+    },
+    {
+      "name": "Device / Delete",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/device/{{deviceId}}", "host": ["{{baseUrl}}"], "path": ["device","{{deviceId}}"] }
+      }
+    },
+    {
+      "name": "Notifications / ESP32 Webhook",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{baseUrl}}/notifications/webhook/esp32", "host": ["{{baseUrl}}"], "path": ["notifications","webhook","esp32"] },
+        "body": { "mode": "raw", "raw": "{\n  \"mac_address\": \"AA:BB:CC:DD:EE:01\",\n  \"tipo\": \"EMERGENCIA\",\n  \"fecha_hora\": \"2025-12-07T12:34:56Z\",\n  \"mensaje\": \"\",\n  \"bateria\": 78,\n  \"ubicacion\": \"-12.05,-77.05\"\n}" }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "jwt", "value": "" },
+    { "key": "userId", "value": "1" },
+    { "key": "deviceId", "value": "1" }
+  ]
+}

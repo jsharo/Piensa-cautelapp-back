@@ -58,6 +58,7 @@ async function main() {
   const dispositivo = await prisma.dispositivo.create({
     data: {
       bateria: 95,
+      mac_address: 'AA:BB:CC:DD:EE:FF'
     },
   });
 

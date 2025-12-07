@@ -12,12 +12,14 @@ export class UserService {
     const exists = await this.prisma.usuario.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email ya registrado');
     const hash = await bcrypt.hash(dto.contrasena, 10);
+    // Asignar siempre el rol "cuidador" desde BD, ignorando cualquier id_rol entrante
+    const defaultRole = await this.ensureDefaultRole();
     const user = await this.prisma.usuario.create({
       data: {
         nombre: dto.nombre,
         email: dto.email,
         contrasena: hash,
-        id_rol: dto.id_rol ?? (await this.ensureDefaultRole()).id_rol,
+        id_rol: defaultRole.id_rol,
       },
       include: { rol: true },
     });
