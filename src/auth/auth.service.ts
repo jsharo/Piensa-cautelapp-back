@@ -32,8 +32,13 @@ export class AuthService {
       include: { rol: true },
     });
 
-    const token = await this.signToken(user.id_usuario, user.email, user.rol?.nombre_rol);
-    return { user: this.sanitize(user), access_token: token };
+    const expiresIn = '7d';
+    const token = await this.signToken(user.id_usuario, user.email, user.rol?.nombre_rol, expiresIn);
+    return { 
+      user: this.sanitize(user), 
+      access_token: token,
+      expires_in: expiresIn
+    };
   }
 
   async login(dto: LoginDto) {
@@ -41,8 +46,16 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Credenciales inválidas');
     const ok = await bcrypt.compare(dto.contrasena, user.contrasena);
     if (!ok) throw new UnauthorizedException('Credenciales inválidas');
-    const token = await this.signToken(user.id_usuario, user.email, user.rol?.nombre_rol);
-    return { user: this.sanitize(user), access_token: token };
+    
+    // Si remember es true, el token dura 30 días, sino 7 días
+    const expiresIn = dto.remember ? '30d' : '7d';
+    const token = await this.signToken(user.id_usuario, user.email, user.rol?.nombre_rol, expiresIn);
+    
+    return { 
+      user: this.sanitize(user), 
+      access_token: token,
+      expires_in: expiresIn 
+    };
   }
 
   async me(userId: number) {
@@ -50,8 +63,12 @@ export class AuthService {
     return this.sanitize(user!);
   }
 
-  private async signToken(sub: number, email: string, role?: string) {
-    return this.jwt.signAsync({ sub, email, role });
+  private async signToken(sub: number, email: string, role?: string, expiresIn?: string) {
+    const payload = { sub, email, role };
+    if (expiresIn) {
+      return this.jwt.signAsync(payload, { expiresIn } as any);
+    }
+    return this.jwt.signAsync(payload);
   }
 
   private sanitize(user: any) {

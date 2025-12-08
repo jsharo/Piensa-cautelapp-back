@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcrypt');
 
 const prisma = new PrismaClient();
 
@@ -43,20 +44,29 @@ async function main() {
   ]);
 
   // Usuario (email es único -> upsert)
+  const hashedPassword = await bcrypt.hash('123456', 10);
   const usuario = await prisma.usuario.upsert({
     where: { email: 'admin@demo.local' },
-    update: {},
+    update: {
+      nombre: 'Admin Demo',
+      contrasena: hashedPassword,
+      id_rol: adminRole.id_rol,
+    },
     create: {
       nombre: 'Admin Demo',
       email: 'admin@demo.local',
-      contrasena: '123456',
+      contrasena: hashedPassword,
       id_rol: adminRole.id_rol,
     },
   });
 
-  // Dispositivo
-  const dispositivo = await prisma.dispositivo.create({
-    data: {
+  // Dispositivo (usar upsert para evitar conflicto por mac_address única)
+  const dispositivo = await prisma.dispositivo.upsert({
+    where: { mac_address: 'AA:BB:CC:DD:EE:FF' },
+    update: {
+      bateria: 95,
+    },
+    create: {
       bateria: 95,
       mac_address: 'AA:BB:CC:DD:EE:FF'
     },
