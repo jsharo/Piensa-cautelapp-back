@@ -14,9 +14,9 @@ async function bootstrap() {
       'http://localhost:8100', // Ionic serve
       'http://localhost:4200', // Angular dev server
       'http://localhost:8080', // Capacitor
-      'http://app4.local', // Producción nginx
       'capacitor://localhost', // Capacitor iOS
       'ionic://localhost', // Capacitor Android
+      process.env.FRONTEND_URL || 'https://cautelapp.netlify.app', // Frontend en Netlify
     ],
     credentials: true,
   });
