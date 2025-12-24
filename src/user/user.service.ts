@@ -53,7 +53,31 @@ export class UserService {
       data.contrasena = await bcrypt.hash(dto.contrasena, 10);
     }
     if (dto.email !== undefined) {
+      // Verificar que el email no esté en uso por otro usuario
+      const emailExists = await this.prisma.usuario.findUnique({
+        where: { email: dto.email }
+      });
+      
+      if (emailExists && emailExists.id_usuario !== id) {
+        throw new ConflictException('Este correo electrónico ya está en uso');
+      }
+      
       data.email = dto.email;
+    }
+    
+    if (dto.email_recuperacion !== undefined) {
+      // Verificar que el email de recuperación no esté en uso
+      if (dto.email_recuperacion) {
+        const emailRecExists = await this.prisma.usuario.findUnique({
+          where: { email_recuperacion: dto.email_recuperacion }
+        });
+        
+        if (emailRecExists && emailRecExists.id_usuario !== id) {
+          throw new ConflictException('Este correo de recuperación ya está en uso');
+        }
+      }
+      
+      data.email_recuperacion = dto.email_recuperacion;
     }
 
     const user = await this.prisma.usuario.update({ where: { id_usuario: id }, data, include: { rol: true } });

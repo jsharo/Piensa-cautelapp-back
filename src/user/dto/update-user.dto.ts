@@ -12,6 +12,10 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 	email?: string;
 
 	@IsOptional()
+	@IsEmail()
+	email_recuperacion?: string;
+
+	@IsOptional()
 	@IsString()
 	@MinLength(6)
 	contrasena?: string;

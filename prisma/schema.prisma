@@ -11,11 +11,12 @@ datasource db {
 }
 
 model Usuario {
-  id_usuario   Int      @id @default(autoincrement())
-  nombre       String
-  email        String   @unique
-  contrasena   String
-  imagen       String?  // optional
+  id_usuario         Int      @id @default(autoincrement())
+  nombre             String
+  email              String   @unique
+  email_recuperacion String?  @unique // Email secundario para recuperación de contraseña
+  contrasena         String
+  imagen             String?  // optional
 
   // FK
   id_rol       Int
@@ -107,4 +108,12 @@ model UsuarioAdultoMayor {
 
   @@id([id_usuario, id_adulto])
   @@map("Usuario-AdultoMayor")
+}
+
+model PasswordReset {
+  email     String    @id
+  code      String
+  expiresAt DateTime
+
+  @@map("PasswordReset")
 }

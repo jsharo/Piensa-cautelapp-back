@@ -21,6 +21,21 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@Req() req: any) {
-    return this.auth.me(req.user.sub);
+    return this.auth.me(req.user.id_usuario);
+  }
+
+  @Post('forgot-password')
+  forgotPassword(@Body() body: { email: string }) {
+    return this.auth.forgotPassword(body.email);
+  }
+
+  @Post('verify-reset-code')
+  verifyResetCode(@Body() body: { email: string; code: string }) {
+    return this.auth.verifyResetCode(body.email, body.code);
+  }
+
+  @Post('reset-password')
+  resetPassword(@Body() body: { email: string; code: string; newPassword: string }) {
+    return this.auth.resetPassword(body.email, body.code, body.newPassword);
   }
 }
