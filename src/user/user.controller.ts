@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -26,8 +26,22 @@ export class UserController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.userService.update(+id, updateUserDto);
+  update(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    const userId = req.user?.id_usuario;
+    const paramId = +id;
+
+    // Validar que el usuario autenticado sea el propietario del perfil
+    if (userId !== paramId) {
+      throw new ForbiddenException(
+        'No tienes permiso para actualizar este perfil',
+      );
+    }
+
+    return this.userService.update(paramId, updateUserDto);
   }
 
   @Delete(':id')
@@ -36,3 +50,4 @@ export class UserController {
     return this.userService.remove(+id);
   }
 }
+

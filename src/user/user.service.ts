@@ -40,10 +40,22 @@ export class UserService {
   }
 
   async update(id: number, dto: UpdateUserDto) {
-    const data: any = { ...dto };
-    if (dto.contrasena) {
+    const data: any = {};
+    
+    // Solo incluir campos que están definidos
+    if (dto.nombre !== undefined) {
+      data.nombre = dto.nombre;
+    }
+    if (dto.imagen !== undefined) {
+      data.imagen = dto.imagen;
+    }
+    if (dto.contrasena !== undefined) {
       data.contrasena = await bcrypt.hash(dto.contrasena, 10);
     }
+    if (dto.email !== undefined) {
+      data.email = dto.email;
+    }
+
     const user = await this.prisma.usuario.update({ where: { id_usuario: id }, data, include: { rol: true } });
     const { contrasena, ...rest } = user;
     return rest;

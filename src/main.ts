@@ -9,7 +9,7 @@ async function bootstrap() {
   // Establecer prefijo global para todas las rutas
   app.setGlobalPrefix('api');
   
-  // Habilitar CORS para permitir peticiones desde el frontend
+  // Habilitar CORS para permitir peticiones desde el frontend en desarrollo local
   app.enableCors({
     origin: [
       'http://localhost:8100', // Ionic serve
@@ -17,10 +17,13 @@ async function bootstrap() {
       'http://localhost:8080', // Capacitor
       'capacitor://localhost', // Capacitor iOS
       'ionic://localhost', // Capacitor Android
-      process.env.FRONTEND_URL || 'https://cautelapp.netlify.app', // Frontend en Netlify
     ],
     credentials: true,
   });
+  
+  // Aumentar límite de payload para permitir imágenes base64
+  app.use(require('express').json({ limit: '50mb' }));
+  app.use(require('express').urlencoded({ limit: '50mb', extended: true }));
   
   app.useGlobalPipes(
     new ValidationPipe({

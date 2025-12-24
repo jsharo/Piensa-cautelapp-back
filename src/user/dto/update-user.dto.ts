@@ -15,5 +15,8 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 	@IsString()
 	@MinLength(6)
 	contrasena?: string;
-  id_rol: undefined;
+
+	@IsOptional()
+	@IsString()
+	imagen?: string;
 }

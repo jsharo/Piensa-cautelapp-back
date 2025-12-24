@@ -64,7 +64,7 @@ export class AuthService {
   }
 
   private async signToken(sub: number, email: string, role?: string, expiresIn?: string) {
-    const payload = { sub, email, role };
+    const payload = { id_usuario: sub, email, role };
     if (expiresIn) {
       return this.jwt.signAsync(payload, { expiresIn } as any);
     }
