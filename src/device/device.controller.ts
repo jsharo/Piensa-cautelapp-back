@@ -3,6 +3,7 @@ import { DeviceService } from './device.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
+import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 
 @Controller('device')
@@ -26,6 +27,17 @@ export class DeviceController {
   obtenerMisDispositivos(@Req() req: any) {
     const userId = req.user.id_usuario;
     return this.deviceService.obtenerDispositivosDeUsuario(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('adulto-mayor/:id')
+  actualizarAdultoMayor(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateAdultoMayorDto
+  ) {
+    const userId = req.user.id_usuario;
+    return this.deviceService.updateAdultoMayor(userId, +id, dto);
   }
 
   @Get()

@@ -1,7 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
+import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -145,5 +146,42 @@ export class DeviceService {
       direccion: rel.adulto.direccion,
       dispositivo: rel.adulto.dispositivo,
     }));
+  }
+
+  async updateAdultoMayor(userId: number, adultoId: number, dto: UpdateAdultoMayorDto) {
+    // Verificar que el adulto mayor pertenece al usuario
+    const relacion = await this.prisma.usuarioAdultoMayor.findUnique({
+      where: {
+        id_usuario_id_adulto: {
+          id_usuario: userId,
+          id_adulto: adultoId,
+        },
+      },
+    });
+
+    if (!relacion) {
+      throw new ForbiddenException('No tienes permiso para editar este adulto mayor');
+    }
+
+    // Actualizar el adulto mayor
+    const adultoMayorActualizado = await this.prisma.adultoMayor.update({
+      where: { id_adulto: adultoId },
+      data: {
+        ...(dto.nombre && { nombre: dto.nombre }),
+        ...(dto.fecha_nacimiento && { fecha_nacimiento: new Date(dto.fecha_nacimiento) }),
+        ...(dto.direccion && { direccion: dto.direccion }),
+      },
+      include: {
+        dispositivo: true,
+      },
+    });
+
+    return {
+      id_adulto: adultoMayorActualizado.id_adulto,
+      nombre: adultoMayorActualizado.nombre,
+      fecha_nacimiento: adultoMayorActualizado.fecha_nacimiento,
+      direccion: adultoMayorActualizado.direccion,
+      dispositivo: adultoMayorActualizado.dispositivo,
+    };
   }
 }
