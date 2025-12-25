@@ -9,15 +9,27 @@ async function bootstrap() {
   // Establecer prefijo global para todas las rutas
   app.setGlobalPrefix('api');
   
-  // Habilitar CORS para permitir peticiones desde el frontend en desarrollo local
+  // Habilitar CORS para permitir peticiones desde el frontend
+  const allowedOrigins = process.env.NODE_ENV === 'production' 
+    ? ['https://cautelapp.netlify.app', process.env.FRONTEND_URL] // Producción
+    : [ // Desarrollo
+        'http://localhost:8100',
+        'http://localhost:8101',
+        'http://localhost:4200',
+        'http://localhost:8080',
+        'capacitor://localhost',
+        'ionic://localhost',
+      ];
+
   app.enableCors({
-    origin: [
-      'http://localhost:8100', // Ionic serve
-      'http://localhost:4200', // Angular dev server
-      'http://localhost:8080', // Capacitor
-      'capacitor://localhost', // Capacitor iOS
-      'ionic://localhost', // Capacitor Android
-    ],
+    origin: (origin, callback) => {
+      // Permitir requests sin origin (como apps móviles)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // En producción, permitir todos los orígenes para apps móviles
+      }
+    },
     credentials: true,
   });
   
