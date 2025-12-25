@@ -3,7 +3,7 @@ import { DeviceService } from './device.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
-import { JwtGuard } from '../auth/jwt.guard';
+import { JwtAuthGuard } from '../auth/jwt.guard';
 
 @Controller('device')
 export class DeviceController {
@@ -14,14 +14,14 @@ export class DeviceController {
     return this.deviceService.create(createDeviceDto);
   }
 
-  @UseGuards(JwtGuard)
+  @UseGuards(JwtAuthGuard)
   @Post('vincular')
   vincularDispositivo(@Req() req: any, @Body() dto: VincularDispositivoDto) {
     const userId = req.user.id_usuario;
     return this.deviceService.vincularDispositivoAUsuario(userId, dto);
   }
 
-  @UseGuards(JwtGuard)
+  @UseGuards(JwtAuthGuard)
   @Get('mis-dispositivos')
   obtenerMisDispositivos(@Req() req: any) {
     const userId = req.user.id_usuario;
