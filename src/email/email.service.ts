@@ -7,6 +7,13 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
   constructor() {
+    // Log para debug de variables de entorno
+    this.logger.log(`[DEBUG] SMTP_HOST: ${process.env.SMTP_HOST || 'NO CONFIGURADO'}`);
+    this.logger.log(`[DEBUG] SMTP_PORT: ${process.env.SMTP_PORT || 'NO CONFIGURADO'}`);
+    this.logger.log(`[DEBUG] SMTP_USER: ${process.env.SMTP_USER || 'NO CONFIGURADO'}`);
+    this.logger.log(`[DEBUG] SMTP_PASS existe: ${process.env.SMTP_PASS ? 'SÍ' : 'NO'}`);
+    this.logger.log(`[DEBUG] SMTP_PASS longitud: ${process.env.SMTP_PASS?.length || 0} caracteres`);
+    
     // Configurar el transportador de email
     // Para desarrollo, puedes usar Gmail o un servicio SMTP
     this.transporter = nodemailer.createTransport({
