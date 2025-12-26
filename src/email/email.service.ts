@@ -32,9 +32,14 @@ export class EmailService {
 
   private async verifyConnection() {
     try {
+      this.logger.log('[DEBUG] Intentando verificar conexión SMTP...');
       await this.transporter.verify();
       this.logger.log('✅ Servidor de email conectado correctamente');
     } catch (error) {
+      this.logger.error('❌ Error al conectar con el servidor SMTP:');
+      this.logger.error(`[ERROR] Mensaje: ${error.message}`);
+      this.logger.error(`[ERROR] Código: ${error.code}`);
+      this.logger.error(`[ERROR] Comando: ${error.command}`);
       this.logger.warn('⚠️  No se pudo conectar al servidor de email. Los emails se mostrarán en consola.');
       this.logger.warn('Configura SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASS en el archivo .env');
     }
