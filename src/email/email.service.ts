@@ -35,6 +35,10 @@ export class EmailService {
 
   async sendPasswordResetEmail(email: string, code: string, userName?: string): Promise<boolean> {
     try {
+      this.logger.log(`[EMAIL] Iniciando envío de email a: ${email}`);
+      this.logger.log(`[EMAIL] SMTP_USER configurado: ${process.env.SMTP_USER ? 'Sí' : 'No'}`);
+      this.logger.log(`[EMAIL] SMTP_PASS configurado: ${process.env.SMTP_PASS ? 'Sí (oculto)' : 'No'}`);
+      
       // Si no hay configuración de SMTP, solo mostrar en consola
       if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
         this.logger.log(`\n${'='.repeat(60)}`);
@@ -48,6 +52,7 @@ export class EmailService {
       }
 
       // Enviar email real
+      this.logger.log(`[EMAIL] Enviando email real vía SMTP...`);
       const info = await this.transporter.sendMail({
         from: `"CautelApp - Recuperación de Contraseña" <${process.env.SMTP_USER}>`,
         to: email,
@@ -55,10 +60,12 @@ export class EmailService {
         html: this.getPasswordResetEmailTemplate(code, userName || 'Usuario'),
       });
 
-      this.logger.log(`✅ Email enviado: ${info.messageId}`);
+      this.logger.log(`✅ Email enviado exitosamente: ${info.messageId}`);
+      this.logger.log(`[EMAIL] Respuesta del servidor: ${info.response}`);
       return true;
     } catch (error) {
       this.logger.error('❌ Error al enviar email:', error);
+      this.logger.error(`[EMAIL] Detalles del error: ${error.message}`);
       
       // Fallback: mostrar en consola si falla el envío
       this.logger.log(`\n${'='.repeat(60)}`);

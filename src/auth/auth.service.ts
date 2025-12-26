@@ -119,9 +119,11 @@ export class AuthService {
 
     // Enviar email con el código
     try {
+      console.log(`[AUTH] Intentando enviar email a: ${email} con código: ${resetCode}`);
       await this.emailService.sendPasswordResetEmail(email, resetCode, user.nombre);
+      console.log(`[AUTH] ✅ Email enviado exitosamente a: ${email}`);
     } catch (error) {
-      console.error('Error al enviar email:', error);
+      console.error('[AUTH] ❌ Error al enviar email:', error);
       // Continuar de todos modos para desarrollo
     }
 
