@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import * as sgMail from '@sendgrid/mail';
 
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
   private readonly logger = new Logger(EmailService.name);
+  private useSendGrid: boolean = false;
 
   constructor() {
     // Log para debug de variables de entorno
@@ -13,21 +15,28 @@ export class EmailService {
     this.logger.log(`[DEBUG] SMTP_USER: ${process.env.SMTP_USER || 'NO CONFIGURADO'}`);
     this.logger.log(`[DEBUG] SMTP_PASS existe: ${process.env.SMTP_PASS ? 'SÍ' : 'NO'}`);
     this.logger.log(`[DEBUG] SMTP_PASS longitud: ${process.env.SMTP_PASS?.length || 0} caracteres`);
+    this.logger.log(`[DEBUG] SENDGRID_API_KEY existe: ${process.env.SENDGRID_API_KEY ? 'SÍ' : 'NO'}`);
     
-    // Configurar el transportador de email
-    // Para desarrollo, puedes usar Gmail o un servicio SMTP
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '465'),
-      secure: true, // true para 465, false para otros puertos
-      auth: {
-        user: process.env.SMTP_USER, // Tu email
-        pass: process.env.SMTP_PASS, // Tu contraseña o app password
-      },
-    });
+    // Si existe SendGrid API Key, usarlo (recomendado para producción)
+    if (process.env.SENDGRID_API_KEY) {
+      this.useSendGrid = true;
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      this.logger.log('✅ SendGrid configurado correctamente');
+    } else {
+      // Fallback a SMTP
+      this.transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '465'),
+        secure: true, // true para 465, false para otros puertos
+        auth: {
+          user: process.env.SMTP_USER, // Tu email
+          pass: process.env.SMTP_PASS, // Tu contraseña o app password
+        },
+      });
 
-    // Verificar la configuración
-    this.verifyConnection();
+      // Verificar la configuración
+      this.verifyConnection();
+    }
   }
 
   private async verifyConnection() {
@@ -48,6 +57,22 @@ export class EmailService {
   async sendPasswordResetEmail(email: string, code: string, userName?: string): Promise<boolean> {
     try {
       this.logger.log(`[EMAIL] Iniciando envío de email a: ${email}`);
+      
+      // Intentar con SendGrid primero
+      if (this.useSendGrid) {
+        this.logger.log(`[EMAIL] Usando SendGrid para enviar email...`);
+        const msg = {
+          to: email,
+          from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER || 'noreply@cautelapp.com',
+          subject: '🔐 Código de Recuperación de Contraseña - CautelApp',
+          html: this.getPasswordResetEmailTemplate(code, userName || 'Usuario'),
+        };
+        
+        await sgMail.send(msg);
+        this.logger.log(`✅ Email enviado exitosamente vía SendGrid`);
+        return true;
+      }
+      
       this.logger.log(`[EMAIL] SMTP_USER configurado: ${process.env.SMTP_USER ? 'Sí' : 'No'}`);
       this.logger.log(`[EMAIL] SMTP_PASS configurado: ${process.env.SMTP_PASS ? 'Sí (oculto)' : 'No'}`);
       
