@@ -18,8 +18,8 @@ export class EmailService {
     // Para desarrollo, puedes usar Gmail o un servicio SMTP
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false, // true para 465, false para otros puertos
+      port: parseInt(process.env.SMTP_PORT || '465'),
+      secure: true, // true para 465, false para otros puertos
       auth: {
         user: process.env.SMTP_USER, // Tu email
         pass: process.env.SMTP_PASS, // Tu contraseña o app password
