@@ -25,6 +25,9 @@ model Usuario {
   // m:n with AdultoMayor via join table
   usuariosAdultoMayor UsuarioAdultoMayor[]
 
+  // Relación con grupos compartidos
+  sharedGroupMemberships SharedGroupMember[]
+
   @@map("Usuario")
 }
 
@@ -116,4 +119,32 @@ model PasswordReset {
   expiresAt DateTime
 
   @@map("PasswordReset")
+}
+
+// --- INVITACIÓN POR ENLACE/CÓDIGO ---
+model SharedGroup {
+  id              Int      @id @default(autoincrement())
+  name            String?
+  code            String   @unique // Código de invitación único
+  created_by      Int      // FK a Usuario
+  created_at      DateTime @default(now())
+
+  // Relaciones
+  members         SharedGroupMember[]
+
+  @@map("SharedGroup")
+}
+
+model SharedGroupMember {
+  id          Int      @id @default(autoincrement())
+  group_id    Int
+  user_id     Int
+  joined_at   DateTime @default(now())
+
+  // Relaciones
+  group       SharedGroup @relation(fields: [group_id], references: [id])
+  user        Usuario     @relation(fields: [user_id], references: [id_usuario])
+
+  @@unique([group_id, user_id])
+  @@map("SharedGroupMember")
 }
