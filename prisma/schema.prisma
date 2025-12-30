@@ -38,8 +38,8 @@ model AdultoMayor {
   direccion      String
 
   // FK to Dispositivo
-  id_dispositivo Int
-  dispositivo    Dispositivo @relation(fields: [id_dispositivo], references: [id_dispositivo])
+  id_dispositivo Int?
+  dispositivo    Dispositivo? @relation(fields: [id_dispositivo], references: [id_dispositivo])
 
   notificaciones Notificaciones[]
   usuariosAdultoMayor UsuarioAdultoMayor[]

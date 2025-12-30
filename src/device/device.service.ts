@@ -50,7 +50,7 @@ export class DeviceService {
       // Desvincular el dispositivo de todos los AdultoMayor relacionados
       await this.prisma.adultoMayor.updateMany({
         where: { id_dispositivo: id },
-        data: { id_dispositivo: { set: undefined } }
+        data: { id_dispositivo: { set: null } }
       });
       // Ahora sí eliminar el dispositivo
       await this.prisma.dispositivo.delete({ where: { id_dispositivo: id } });
