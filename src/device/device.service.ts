@@ -46,8 +46,25 @@ export class DeviceService {
   }
 
   async remove(id: number) {
-    await this.prisma.dispositivo.delete({ where: { id_dispositivo: id } });
-    return { success: true };
+    try {
+      // Desvincular el dispositivo de todos los AdultoMayor relacionados
+      await this.prisma.adultoMayor.updateMany({
+        where: { id_dispositivo: id },
+        data: { id_dispositivo: { set: undefined } }
+      });
+      // Ahora sí eliminar el dispositivo
+      await this.prisma.dispositivo.delete({ where: { id_dispositivo: id } });
+      return { success: true };
+    } catch (error) {
+      if (error.code === 'P2025') {
+        // Prisma error: record not found
+        throw new NotFoundException('Dispositivo no encontrado');
+      }
+      if (error.code === 'P2003') {
+        throw new ConflictException('No se puede eliminar el dispositivo porque está vinculado a otros registros.');
+      }
+      throw error;
+    }
   }
 
   async vincularDispositivoAUsuario(userId: number, dto: VincularDispositivoDto) {
