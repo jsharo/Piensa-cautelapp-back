@@ -40,4 +40,22 @@ export class SharedGroupService {
   async getGroupByCode(code: string) {
     return this.prisma.sharedGroup.findUnique({ where: { code }, include: { members: { include: { user: true } } } });
   }
+
+  async leaveGroup(userId: number, groupId: number) {
+    // Verificar si el usuario es el creador del grupo
+    const group = await this.prisma.sharedGroup.findUnique({ where: { id: groupId } });
+    if (!group) throw new Error('Grupo no encontrado');
+    
+    // Si es el creador, eliminar todo el grupo
+    if (group.created_by === userId) {
+      await this.prisma.sharedGroup.delete({ where: { id: groupId } });
+      return { message: 'Grupo eliminado exitosamente' };
+    }
+    
+    // Si no es el creador, solo eliminar al miembro
+    await this.prisma.sharedGroupMember.deleteMany({
+      where: { group_id: groupId, user_id: userId }
+    });
+    return { message: 'Has salido del grupo exitosamente' };
+  }
 }

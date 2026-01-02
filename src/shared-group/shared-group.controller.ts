@@ -24,4 +24,9 @@ export class SharedGroupController {
   async getGroupByCode(@Param('code') code: string) {
     return this.sharedGroupService.getGroupByCode(code);
   }
+
+  @Post('leave')
+  async leaveGroup(@Body('userId') userId: number, @Body('groupId') groupId: number) {
+    return this.sharedGroupService.leaveGroup(userId, groupId);
+  }
 }

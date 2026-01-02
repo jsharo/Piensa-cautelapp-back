@@ -2,7 +2,7 @@ import { IsString, IsOptional, IsInt, Min, Max, Matches, IsDateString } from 'cl
 
 export class VincularDispositivoDto {
   @IsString()
-  @Matches(/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i, { message: 'mac_address inválida' })
+  // Acepta MAC address (formato AA:BB:CC:DD:EE:FF) o UUID de BLE (Android/iOS)
   mac_address: string;
 
   @IsInt()
