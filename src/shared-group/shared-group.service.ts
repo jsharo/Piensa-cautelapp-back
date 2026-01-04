@@ -9,7 +9,7 @@ export class SharedGroupService {
 
   async createGroup(userId: number, name?: string) {
     const code = randomBytes(4).toString('hex');
-    return this.prisma.sharedGroup.create({
+    const group = await this.prisma.sharedGroup.create({
       data: {
         name,
         code,
@@ -21,6 +21,27 @@ export class SharedGroupService {
           },
         },
       },
+    });
+    
+    // Devolver el grupo con las relaciones incluidas
+    return this.prisma.sharedGroup.findUnique({
+      where: { id: group.id },
+      include: {
+        members: {
+          include: {
+            user: true
+          }
+        },
+        sharedDevices: {
+          include: {
+            adulto: {
+              include: {
+                dispositivo: true
+              }
+            }
+          }
+        }
+      }
     });
   }
 
