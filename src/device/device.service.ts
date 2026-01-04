@@ -47,11 +47,25 @@ export class DeviceService {
 
   async remove(id: number) {
     try {
-      // Desvincular el dispositivo de todos los AdultoMayor relacionados
-      await this.prisma.adultoMayor.updateMany({
+      // Obtener los adultos mayores vinculados a este dispositivo
+      const adultosMayores = await this.prisma.adultoMayor.findMany({
         where: { id_dispositivo: id },
-        data: { id_dispositivo: undefined }
+        select: { id_adulto: true }
       });
+
+      // Eliminar las relaciones UsuarioAdultoMayor
+      if (adultosMayores.length > 0) {
+        const adultoIds = adultosMayores.map(a => a.id_adulto);
+        await this.prisma.usuarioAdultoMayor.deleteMany({
+          where: { id_adulto: { in: adultoIds } }
+        });
+      }
+
+      // Eliminar los AdultoMayor asociados al dispositivo
+      await this.prisma.adultoMayor.deleteMany({
+        where: { id_dispositivo: id }
+      });
+
       // Ahora sí eliminar el dispositivo
       await this.prisma.dispositivo.delete({ where: { id_dispositivo: id } });
       return { success: true };
@@ -155,14 +169,16 @@ export class DeviceService {
       },
     });
 
-    // Mapear y retornar los datos
-    return relaciones.map(rel => ({
-      id_adulto: rel.adulto.id_adulto,
-      nombre: rel.adulto.nombre,
-      fecha_nacimiento: rel.adulto.fecha_nacimiento,
-      direccion: rel.adulto.direccion,
-      dispositivo: rel.adulto.dispositivo,
-    }));
+    // Mapear y retornar solo los datos que tienen dispositivo asociado
+    return relaciones
+      .filter(rel => rel.adulto.id_dispositivo !== null)
+      .map(rel => ({
+        id_adulto: rel.adulto.id_adulto,
+        nombre: rel.adulto.nombre,
+        fecha_nacimiento: rel.adulto.fecha_nacimiento,
+        direccion: rel.adulto.direccion,
+        dispositivo: rel.adulto.dispositivo,
+      }));
   }
 
   async updateAdultoMayor(userId: number, adultoId: number, dto: UpdateAdultoMayorDto) {
