@@ -29,4 +29,50 @@ export class SharedGroupController {
   async leaveGroup(@Body('userId') userId: number, @Body('groupId') groupId: number) {
     return this.sharedGroupService.leaveGroup(userId, groupId);
   }
+
+  // ========== ENDPOINTS PARA DISPOSITIVOS COMPARTIDOS ==========
+
+  @Post('share-device')
+  async shareDevice(
+    @Body('groupId') groupId: number,
+    @Body('adultoId') adultoId: number,
+    @Body('userId') userId: number
+  ) {
+    return this.sharedGroupService.shareDeviceWithGroup(groupId, adultoId, userId);
+  }
+
+  @Post('unshare-device')
+  async unshareDevice(
+    @Body('groupId') groupId: number,
+    @Body('adultoId') adultoId: number,
+    @Body('userId') userId: number
+  ) {
+    return this.sharedGroupService.unshareDeviceFromGroup(groupId, adultoId, userId);
+  }
+
+  @Get('devices/:groupId')
+  async getGroupDevices(@Param('groupId') groupId: number) {
+    return this.sharedGroupService.getSharedDevicesInGroup(groupId);
+  }
+
+  @Get('my-shared-devices/:userId')
+  async getMySharedDevices(@Param('userId') userId: number) {
+    return this.sharedGroupService.getMySharedDevices(userId);
+  }
+
+  // ========== GESTIÓN DE MIEMBROS ==========
+
+  @Post('remove-member')
+  async removeMember(
+    @Body('requesterId') requesterId: number,
+    @Body('groupId') groupId: number,
+    @Body('memberIdToRemove') memberIdToRemove: number
+  ) {
+    return this.sharedGroupService.removeMember(requesterId, groupId, memberIdToRemove);
+  }
+
+  @Get('members/:groupId')
+  async getGroupMembers(@Param('groupId') groupId: number) {
+    return this.sharedGroupService.getGroupMembers(groupId);
+  }
 }

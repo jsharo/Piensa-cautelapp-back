@@ -30,6 +30,10 @@ export class NotificationsService {
       });
 
       this.logger.log(`Notificación creada con ID: ${notification.id_notificacion}`);
+      
+      // Enviar notificación a grupos compartidos
+      await this.notifySharedGroups(notification.id_adulto, notification);
+      
       return notification;
     } catch (error) {
       this.logger.error('Error creando notificación:', error);
@@ -150,6 +154,135 @@ export class NotificationsService {
     this.logger.log(
       `ESP32 webhook OK: tipo=${notification.tipo} id=${notification.id_notificacion} adulto=${adulto.id_adulto} (${nombreAdulto}) disp=${dispositivo.id_dispositivo} mac=${mac} mensaje="${mensajeFinal}"`,
     );
+    
+    // Enviar notificación a grupos compartidos
+    await this.notifySharedGroups(adulto.id_adulto, notification);
+    
     return { success: true, id_notificacion: notification.id_notificacion };
+  }
+
+  // ========== MÉTODOS PARA NOTIFICACIONES COMPARTIDAS ==========
+  
+  /**
+   * Notifica a todos los usuarios de grupos que tienen acceso al dispositivo
+   */
+  private async notifySharedGroups(adultoId: number, notification: any) {
+    try {
+      // Buscar grupos que tienen acceso a este dispositivo
+      const sharedDevices = await this.prisma.sharedGroupDevice.findMany({
+        where: { adulto_id: adultoId },
+        include: {
+          group: {
+            include: {
+              members: {
+                include: {
+                  user: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (sharedDevices.length === 0) {
+        this.logger.log(`No hay grupos compartidos para el adulto ${adultoId}`);
+        return;
+      }
+
+      // Obtener todos los usuarios únicos de todos los grupos
+      const usersToNotify = new Set<number>();
+      sharedDevices.forEach(sd => {
+        sd.group.members.forEach(member => {
+          usersToNotify.add(member.user_id);
+        });
+      });
+
+      this.logger.log(
+        `Notificación compartida con ${usersToNotify.size} usuarios en ${sharedDevices.length} grupo(s) para adulto ${adultoId}`
+      );
+
+      // Aquí podrías agregar lógica adicional para enviar push notifications
+      // o almacenar las notificaciones en una tabla de notificaciones por usuario
+      
+    } catch (error) {
+      this.logger.error('Error notificando a grupos compartidos:', error);
+      // No lanzamos error para no bloquear la creación de la notificación principal
+    }
+  }
+
+  /**
+   * Obtiene notificaciones para un usuario específico (propias + compartidas)
+   */
+  async findByUser(userId: number) {
+    // 1. Obtener notificaciones de dispositivos propios
+    const ownNotifications = await this.prisma.notificaciones.findMany({
+      where: {
+        adulto: {
+          usuariosAdultoMayor: {
+            some: { id_usuario: userId }
+          }
+        }
+      },
+      include: {
+        adulto: {
+          include: { 
+            dispositivo: true,
+            usuariosAdultoMayor: true
+          }
+        }
+      },
+      orderBy: { fecha_hora: 'desc' }
+    });
+
+    // 2. Obtener notificaciones de dispositivos compartidos en grupos
+    const sharedNotifications = await this.prisma.notificaciones.findMany({
+      where: {
+        adulto: {
+          sharedInGroups: {
+            some: {
+              group: {
+                members: {
+                  some: { user_id: userId }
+                }
+              }
+            }
+          }
+        }
+      },
+      include: {
+        adulto: {
+          include: { 
+            dispositivo: true,
+            sharedInGroups: {
+              include: {
+                group: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { fecha_hora: 'desc' }
+    });
+
+    // Combinar y eliminar duplicados por ID
+    const allNotifications: any[] = [...ownNotifications];
+    const existingIds = new Set(ownNotifications.map(n => n.id_notificacion));
+    
+    sharedNotifications.forEach(n => {
+      if (!existingIds.has(n.id_notificacion)) {
+        allNotifications.push(n as any);
+      }
+    });
+
+    // Ordenar por fecha
+    allNotifications.sort((a, b) => 
+      new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime()
+    );
+
+    this.logger.log(
+      `Usuario ${userId}: ${ownNotifications.length} propias + ${sharedNotifications.length} compartidas = ${allNotifications.length} total`
+    );
+
+    return allNotifications;
   }
 }

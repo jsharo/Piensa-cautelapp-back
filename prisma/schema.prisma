@@ -43,6 +43,7 @@ model AdultoMayor {
 
   notificaciones Notificaciones[]
   usuariosAdultoMayor UsuarioAdultoMayor[]
+  sharedInGroups SharedGroupDevice[] // Grupos que tienen acceso a este dispositivo
 
   @@map("AdultoMayor")
 }
@@ -131,6 +132,7 @@ model SharedGroup {
 
   // Relaciones
   members         SharedGroupMember[]
+  sharedDevices   SharedGroupDevice[] // Dispositivos compartidos en este grupo
 
   @@map("SharedGroup")
 }
@@ -139,12 +141,29 @@ model SharedGroupMember {
   id          Int      @id @default(autoincrement())
   group_id    Int
   user_id     Int
+  invited_by  Int?     // FK a Usuario (quién invitó a este miembro, null si es el creador)
   joined_at   DateTime @default(now())
 
   // Relaciones
-  group       SharedGroup @relation(fields: [group_id], references: [id])
-  user        Usuario     @relation(fields: [user_id], references: [id_usuario])
+  group       SharedGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  user        Usuario     @relation(fields: [user_id], references: [id_usuario], onDelete: Cascade)
 
   @@unique([group_id, user_id])
   @@map("SharedGroupMember")
+}
+
+// Tabla intermedia: qué dispositivos (AdultoMayor) están compartidos en cada grupo
+model SharedGroupDevice {
+  id              Int      @id @default(autoincrement())
+  group_id        Int
+  adulto_id       Int      // FK a AdultoMayor (quien tiene el dispositivo)
+  shared_by       Int      // FK a Usuario (quién compartió)
+  shared_at       DateTime @default(now())
+
+  // Relaciones
+  group           SharedGroup  @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  adulto          AdultoMayor  @relation(fields: [adulto_id], references: [id_adulto], onDelete: Cascade)
+
+  @@unique([group_id, adulto_id]) // Un dispositivo solo puede compartirse una vez por grupo
+  @@map("SharedGroupDevice")
 }
