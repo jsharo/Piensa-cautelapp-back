@@ -11,8 +11,13 @@ export class SharedGroupController {
   }
 
   @Post('join')
-  async joinGroup(@Body('userId') userId: number, @Body('code') code: string) {
-    return this.sharedGroupService.joinGroupByCode(userId, code);
+  async joinGroup(@Body('userId') userId: string, @Body('code') code: string) {
+    // Convertir userId a número
+    const userIdNum = parseInt(userId as any, 10);
+    if (isNaN(userIdNum)) {
+      throw new Error('ID de usuario inválido');
+    }
+    return this.sharedGroupService.joinGroupByCode(userIdNum, code);
   }
 
   @Get('my/:userId')

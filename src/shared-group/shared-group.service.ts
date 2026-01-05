@@ -46,15 +46,56 @@ export class SharedGroupService {
   }
 
   async joinGroupByCode(userId: number, code: string) {
-    const group = await this.prisma.sharedGroup.findUnique({ where: { code }, include: { members: true } });
-    if (!group) throw new Error('Código de grupo inválido');
+    // Buscar el grupo con el código
+    const group = await this.prisma.sharedGroup.findUnique({ 
+      where: { code }, 
+      include: { 
+        members: true,
+        sharedDevices: {
+          include: {
+            adulto: {
+              include: {
+                dispositivo: true
+              }
+            }
+          }
+        }
+      } 
+    });
+    
+    if (!group) {
+      throw new Error('Código de grupo inválido');
+    }
+    
+    // Verificar si ya es miembro
     const alreadyMember = group.members.some(m => m.user_id === userId);
-    if (alreadyMember) return group;
+    if (alreadyMember) {
+      // Si ya es miembro, retornar el grupo completo con todas las relaciones
+      return this.prisma.sharedGroup.findUnique({ 
+        where: { id: group.id }, 
+        include: { 
+          members: { 
+            include: { 
+              user: true 
+            } 
+          },
+          sharedDevices: {
+            include: {
+              adulto: {
+                include: {
+                  dispositivo: true
+                }
+              }
+            }
+          }
+        } 
+      });
+    }
     
     // El primer miembro después del creador será invitado por el creador
-    // Los siguientes serán invitados por sí mismos (auto-invitación con código)
     const invitedBy = group.created_by;
     
+    // Agregar al usuario como nuevo miembro
     await this.prisma.sharedGroupMember.create({ 
       data: { 
         group_id: group.id, 
@@ -62,6 +103,8 @@ export class SharedGroupService {
         invited_by: invitedBy
       } 
     });
+    
+    // Retornar el grupo completo con todas las relaciones
     return this.prisma.sharedGroup.findUnique({ 
       where: { id: group.id }, 
       include: { 
@@ -69,7 +112,16 @@ export class SharedGroupService {
           include: { 
             user: true 
           } 
-        } 
+        },
+        sharedDevices: {
+          include: {
+            adulto: {
+              include: {
+                dispositivo: true
+              }
+            }
+          }
+        }
       } 
     });
   }
