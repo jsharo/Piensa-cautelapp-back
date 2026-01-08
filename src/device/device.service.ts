@@ -3,11 +3,16 @@ import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
+import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { DeviceEventsService } from './device-events.service';
 
 @Injectable()
 export class DeviceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private deviceEventsService: DeviceEventsService,
+  ) {}
 
   async create(dto: CreateDeviceDto) {
     if (dto.mac_address) {
@@ -215,6 +220,117 @@ export class DeviceService {
       fecha_nacimiento: adultoMayorActualizado.fecha_nacimiento,
       direccion: adultoMayorActualizado.direccion,
       dispositivo: adultoMayorActualizado.dispositivo,
+    };
+  }
+
+  /**
+   * Maneja la notificación de conexión WiFi del ESP32
+   * Si se proporciona mac_address, notifica solo a los usuarios del dispositivo específico
+   * Si no se proporciona, notifica a todos los usuarios con dispositivos (fallback)
+   */
+  async handleEsp32Connection(dto: Esp32ConnectionDto) {
+    console.log('[ESP32] Notificación de conexión recibida:', dto);
+
+    let notifiedUsers = 0;
+    let notifiedDevices = 0;
+
+    // Si se proporciona mac_address, buscar dispositivo específico
+    if (dto.mac_address) {
+      const dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { mac_address: dto.mac_address },
+        include: {
+          adultos: {
+            include: {
+              usuariosAdultoMayor: {
+                select: {
+                  id_usuario: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (dispositivo) {
+        console.log(`[ESP32] Dispositivo encontrado: ${dispositivo.mac_address}`);
+        notifiedDevices = 1;
+
+        // Notificar solo a los usuarios de este dispositivo específico
+        for (const adultoMayor of dispositivo.adultos) {
+          for (const relacion of adultoMayor.usuariosAdultoMayor) {
+            this.deviceEventsService.emitDeviceConnection({
+              userId: relacion.id_usuario,
+              deviceId: dispositivo.id_dispositivo,
+              macAddress: dispositivo.mac_address || 'unknown',
+              status: dto.status,
+              ssid: dto.ssid,
+              rssi: dto.rssi,
+              ip: dto.ip,
+              timestamp: new Date(),
+            });
+            notifiedUsers++;
+          }
+        }
+
+        return {
+          success: true,
+          message: 'Conexión registrada y usuarios notificados',
+          notifiedDevices,
+          notifiedUsers,
+        };
+      } else {
+        console.warn(`[ESP32] Dispositivo no encontrado: ${dto.mac_address}`);
+        return {
+          success: false,
+          message: 'Dispositivo no encontrado en la base de datos',
+          notifiedDevices: 0,
+          notifiedUsers: 0,
+        };
+      }
+    }
+
+    // Fallback: Si no hay mac_address, notificar a todos los dispositivos
+    console.log('[ESP32] No se proporcionó mac_address, notificando a todos los dispositivos');
+    
+    const dispositivos = await this.prisma.dispositivo.findMany({
+      include: {
+        adultos: {
+          include: {
+            usuariosAdultoMayor: {
+              select: {
+                id_usuario: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    notifiedDevices = dispositivos.length;
+
+    for (const dispositivo of dispositivos) {
+      for (const adultoMayor of dispositivo.adultos) {
+        for (const relacion of adultoMayor.usuariosAdultoMayor) {
+          this.deviceEventsService.emitDeviceConnection({
+            userId: relacion.id_usuario,
+            deviceId: dispositivo.id_dispositivo,
+            macAddress: dispositivo.mac_address || 'unknown',
+            status: dto.status,
+            ssid: dto.ssid,
+            rssi: dto.rssi,
+            ip: dto.ip,
+            timestamp: new Date(),
+          });
+          notifiedUsers++;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Conexión registrada (broadcast a todos los dispositivos)',
+      notifiedDevices,
+      notifiedUsers,
     };
   }
 }

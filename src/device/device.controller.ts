@@ -1,14 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards, Sse, MessageEvent } from '@nestjs/common';
 import { DeviceService } from './device.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
+import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { SseJwtAuthGuard } from '../auth/sse-jwt.guard';
+import { DeviceEventsService } from './device-events.service';
+import { Observable, map, filter } from 'rxjs';
 
 @Controller('device')
 export class DeviceController {
-  constructor(private readonly deviceService: DeviceService) {}
+  constructor(
+    private readonly deviceService: DeviceService,
+    private readonly deviceEventsService: DeviceEventsService,
+  ) {}
 
   @Post()
   create(@Body() createDeviceDto: CreateDeviceDto) {
@@ -58,5 +65,35 @@ export class DeviceController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.deviceService.remove(+id);
+  }
+
+  // ============ ESP32 ENDPOINTS ============
+  
+  /**
+   * Endpoint para recibir notificaciones de conexión WiFi del ESP32
+   * No requiere autenticación ya que es llamado por el dispositivo
+   */
+  @Post('esp32/connection')
+  handleEsp32Connection(@Body() dto: Esp32ConnectionDto) {
+    return this.deviceService.handleEsp32Connection(dto);
+  }
+
+  /**
+   * SSE endpoint para que el frontend escuche eventos de conexión de dispositivos
+   * Requiere autenticación y solo envía eventos del usuario autenticado
+   * El token JWT se pasa como query parameter: ?token=xxx
+   */
+  @UseGuards(SseJwtAuthGuard)
+  @Sse('events/connection')
+  deviceConnectionEvents(@Req() req: any): Observable<MessageEvent> {
+    const userId = req.user.id_usuario;
+    console.log(`[SSE] Usuario ${userId} conectado a eventos de dispositivo`);
+
+    return this.deviceEventsService.deviceConnection$.pipe(
+      filter(event => event.userId === userId),
+      map(event => ({
+        data: event,
+      } as MessageEvent))
+    );
   }
 }
