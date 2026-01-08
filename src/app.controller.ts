@@ -21,8 +21,6 @@ export class AppController {
     const { deviceId } = body;
     console.log(`[ESP32] Confirmación de conexión recibida:`, body);
     
-    // TODO: Descomentar cuando la migración de BD esté aplicada
-    /*
     try {
       // Buscar o crear el dispositivo
       const device = await this.prisma.dispositivo.upsert({
@@ -45,10 +43,6 @@ export class AppController {
       console.error(`[ESP32] Error actualizando dispositivo ${deviceId}:`, error);
       return { status: 'error', message: 'Error updating device status' };
     }
-    */
-    
-    // Respuesta temporal hasta que se aplique la migración
-    return { status: 'ok', deviceId, online: true, message: 'Connection received' };
   }
 
   // Endpoint para consultar el estado de conexión de dispositivos
@@ -60,10 +54,9 @@ export class AppController {
           id_dispositivo: true,
           mac_address: true,
           bateria: true,
-          // TODO: Descomentar cuando la migración esté aplicada
-          // device_id: true,
-          // online_status: true,
-          // last_seen: true,
+          device_id: true,
+          online_status: true,
+          last_seen: true,
           adultos: {
             select: {
               id_adulto: true,
@@ -77,10 +70,10 @@ export class AppController {
         status: 'ok',
         devices: devices.map(device => ({
           id: device.id_dispositivo,
-          deviceId: 'Unknown', // device.device_id,
+          deviceId: device.device_id,
           macAddress: device.mac_address,
-          isOnline: false, // device.online_status,
-          lastSeen: null, // device.last_seen,
+          isOnline: device.online_status,
+          lastSeen: device.last_seen,
           battery: device.bateria,
           adultos: device.adultos,
         }))
@@ -94,20 +87,42 @@ export class AppController {
   // Endpoint para consultar estado específico de un dispositivo
   @Get('devices/:deviceId/status')
   async getDeviceStatus(@Param('deviceId') deviceId: string) {
-    
     try {
-      // TODO: Cambiar cuando la migración esté aplicada
-      // const device = await this.prisma.dispositivo.findUnique({
-      //   where: { device_id: deviceId },
+      const device = await this.prisma.dispositivo.findUnique({
+        where: { device_id: deviceId },
+        select: {
+          id_dispositivo: true,
+          device_id: true,
+          mac_address: true,
+          bateria: true,
+          online_status: true,
+          last_seen: true,
+          adultos: {
+            select: {
+              id_adulto: true,
+              nombre: true,
+            }
+          }
+        }
+      });
+
+      if (!device) {
+        return {
+          status: 'error',
+          message: 'Device not found'
+        };
+      }
       
       return {
         status: 'ok',
         device: {
-          deviceId: deviceId,
-          isOnline: false, // Temporal hasta aplicar migración
-          lastSeen: null,
-          battery: null,
-          message: 'Migration pending - device status not available yet'
+          id: device.id_dispositivo,
+          deviceId: device.device_id,
+          macAddress: device.mac_address,
+          isOnline: device.online_status,
+          lastSeen: device.last_seen,
+          battery: device.bateria,
+          adultos: device.adultos,
         }
       };
     } catch (error) {
