@@ -52,6 +52,11 @@ model Dispositivo {
   id_dispositivo Int @id @default(autoincrement())
   bateria        Int
   mac_address    String? @unique
+  device_id      String? @unique // ID del dispositivo (ej: "CautelApp-D1")
+  online_status  Boolean @default(false) // Estado de conexión online/offline
+  last_seen      DateTime? // Última vez que se conectó
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
   adultos AdultoMayor[]
 
