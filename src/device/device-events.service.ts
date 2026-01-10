@@ -10,6 +10,7 @@ export interface DeviceConnectionEvent {
   rssi: number;
   ip?: string;
   timestamp: Date;
+  deviceName?: string;
 }
 
 @Injectable()
