@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards, Sse, MessageEvent } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards, Sse, MessageEvent, Query } from '@nestjs/common';
 import { DeviceService } from './device.service';
 import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateDeviceDto } from './dto/update-device.dto';
@@ -76,6 +76,18 @@ export class DeviceController {
   @Post('esp32/connection')
   handleEsp32Connection(@Body() dto: Esp32ConnectionDto) {
     return this.deviceService.handleEsp32Connection(dto);
+  }
+
+  /**
+   * Endpoint para consultar el estado de conexión de un dispositivo ESP32
+   * El frontend lo usa para hacer polling y verificar si el dispositivo ya se conectó
+   */
+  @Get('esp32/status')
+  checkDeviceStatus(@Query('device') deviceName: string) {
+    if (!deviceName) {
+      return { error: 'Parámetro "device" requerido' };
+    }
+    return this.deviceService.checkDeviceConnectionStatus(deviceName);
   }
 
   /**

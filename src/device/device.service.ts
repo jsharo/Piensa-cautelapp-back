@@ -9,6 +9,14 @@ import { DeviceEventsService } from './device-events.service';
 
 @Injectable()
 export class DeviceService {
+  // Almacenamiento temporal en memoria de dispositivos conectados (no persistente)
+  private connectedDevices = new Map<string, {
+    device: string;
+    ssid: string;
+    ip: string;
+    timestamp: Date;
+  }>();
+
   constructor(
     private prisma: PrismaService,
     private deviceEventsService: DeviceEventsService,
@@ -225,53 +233,60 @@ export class DeviceService {
 
   /**
    * Maneja la notificación de conexión WiFi del ESP32
-   * Si se proporciona mac_address, notifica solo a los usuarios del dispositivo específico
-   * Si no se proporciona, notifica a todos los usuarios con dispositivos (fallback)
+   * Guarda el estado en memoria (no en BD)
    */
   async handleEsp32Connection(dto: Esp32ConnectionDto) {
     console.log('[ESP32] Notificación de conexión recibida:', dto);
 
-    // Buscar todos los dispositivos y notificar a sus usuarios
-    const dispositivos = await this.prisma.dispositivo.findMany({
-      include: {
-        adultos: {
-          include: {
-            usuariosAdultoMayor: {
-              select: {
-                id_usuario: true,
-              },
-            },
-          },
-        },
-      },
+    // Guardar el estado de conexión en memoria
+    this.connectedDevices.set(dto.device, {
+      device: dto.device,
+      ssid: dto.ssid,
+      ip: dto.ip,
+      timestamp: new Date(),
     });
 
-    let notifiedUsers = 0;
-    const notifiedDevices = dispositivos.length;
-
-    for (const dispositivo of dispositivos) {
-      for (const adultoMayor of dispositivo.adultos) {
-        for (const relacion of adultoMayor.usuariosAdultoMayor) {
-          this.deviceEventsService.emitDeviceConnection({
-            userId: relacion.id_usuario,
-            deviceId: dispositivo.id_dispositivo,
-            macAddress: dispositivo.mac_address || 'unknown',
-            status: 'CONNECTED',
-            ssid: dto.ssid,
-            rssi: 0,
-            ip: dto.ip,
-            timestamp: new Date(),
-          });
-          notifiedUsers++;
-        }
-      }
-    }
+    console.log(`[ESP32] Dispositivo ${dto.device} registrado en memoria`);
+    console.log(`[ESP32] Total dispositivos en memoria: ${this.connectedDevices.size}`);
 
     return {
       success: true,
-      message: 'Conexión registrada y usuarios notificados',
-      notifiedDevices,
-      notifiedUsers,
+      message: 'Conexión registrada en memoria',
+      device: dto.device,
     };
+  }
+
+  /**
+   * Consulta si un dispositivo (por nombre) está conectado
+   * No consulta la BD, solo la memoria temporal
+   */
+  async checkDeviceConnectionStatus(deviceName: string) {
+    const deviceInfo = this.connectedDevices.get(deviceName);
+
+    if (deviceInfo) {
+      console.log(`[ESP32] Dispositivo ${deviceName} encontrado: conectado`);
+      return {
+        connected: true,
+        device: deviceInfo.device,
+        ssid: deviceInfo.ssid,
+        ip: deviceInfo.ip,
+        timestamp: deviceInfo.timestamp,
+      };
+    }
+
+    console.log(`[ESP32] Dispositivo ${deviceName} no encontrado en memoria`);
+    return {
+      connected: false,
+      message: 'Dispositivo no conectado aún',
+    };
+  }
+
+  /**
+   * Limpia el estado de conexión de un dispositivo de la memoria
+   */
+  clearDeviceConnectionStatus(deviceName: string) {
+    const removed = this.connectedDevices.delete(deviceName);
+    console.log(`[ESP32] Estado de ${deviceName} eliminado de memoria: ${removed}`);
+    return { success: removed };
   }
 }
