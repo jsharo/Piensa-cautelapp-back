@@ -231,67 +231,7 @@ export class DeviceService {
   async handleEsp32Connection(dto: Esp32ConnectionDto) {
     console.log('[ESP32] Notificación de conexión recibida:', dto);
 
-    let notifiedUsers = 0;
-    let notifiedDevices = 0;
-
-    // Si se proporciona mac_address, buscar dispositivo específico
-    if (dto.mac_address) {
-      const dispositivo = await this.prisma.dispositivo.findUnique({
-        where: { mac_address: dto.mac_address },
-        include: {
-          adultos: {
-            include: {
-              usuariosAdultoMayor: {
-                select: {
-                  id_usuario: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (dispositivo) {
-        console.log(`[ESP32] Dispositivo encontrado: ${dispositivo.mac_address}`);
-        notifiedDevices = 1;
-
-        // Notificar solo a los usuarios de este dispositivo específico
-        for (const adultoMayor of dispositivo.adultos) {
-          for (const relacion of adultoMayor.usuariosAdultoMayor) {
-            this.deviceEventsService.emitDeviceConnection({
-              userId: relacion.id_usuario,
-              deviceId: dispositivo.id_dispositivo,
-              macAddress: dispositivo.mac_address || 'unknown',
-              status: dto.status,
-              ssid: dto.ssid,
-              rssi: dto.rssi,
-              ip: dto.ip,
-              timestamp: new Date(),
-            });
-            notifiedUsers++;
-          }
-        }
-
-        return {
-          success: true,
-          message: 'Conexión registrada y usuarios notificados',
-          notifiedDevices,
-          notifiedUsers,
-        };
-      } else {
-        console.warn(`[ESP32] Dispositivo no encontrado: ${dto.mac_address}`);
-        return {
-          success: false,
-          message: 'Dispositivo no encontrado en la base de datos',
-          notifiedDevices: 0,
-          notifiedUsers: 0,
-        };
-      }
-    }
-
-    // Fallback: Si no hay mac_address, notificar a todos los dispositivos
-    console.log('[ESP32] No se proporcionó mac_address, notificando a todos los dispositivos');
-    
+    // Buscar todos los dispositivos y notificar a sus usuarios
     const dispositivos = await this.prisma.dispositivo.findMany({
       include: {
         adultos: {
@@ -306,7 +246,8 @@ export class DeviceService {
       },
     });
 
-    notifiedDevices = dispositivos.length;
+    let notifiedUsers = 0;
+    const notifiedDevices = dispositivos.length;
 
     for (const dispositivo of dispositivos) {
       for (const adultoMayor of dispositivo.adultos) {
@@ -315,9 +256,9 @@ export class DeviceService {
             userId: relacion.id_usuario,
             deviceId: dispositivo.id_dispositivo,
             macAddress: dispositivo.mac_address || 'unknown',
-            status: dto.status,
+            status: 'CONNECTED',
             ssid: dto.ssid,
-            rssi: dto.rssi,
+            rssi: 0,
             ip: dto.ip,
             timestamp: new Date(),
           });
@@ -328,7 +269,7 @@ export class DeviceService {
 
     return {
       success: true,
-      message: 'Conexión registrada (broadcast a todos los dispositivos)',
+      message: 'Conexión registrada y usuarios notificados',
       notifiedDevices,
       notifiedUsers,
     };

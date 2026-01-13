@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class Esp32ConnectionDto {
   @IsNotEmpty()
@@ -7,21 +7,9 @@ export class Esp32ConnectionDto {
 
   @IsNotEmpty()
   @IsString()
-  status: string;
-
-  @IsNotEmpty()
-  @IsString()
   ssid: string;
 
   @IsNotEmpty()
-  @IsNumber()
-  rssi: number;
-
-  @IsOptional()
   @IsString()
-  ip?: string;
-
-  @IsOptional()
-  @IsString()
-  mac_address?: string;
+  ip: string;
 }
