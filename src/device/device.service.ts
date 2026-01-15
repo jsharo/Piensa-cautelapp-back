@@ -14,6 +14,7 @@ export class DeviceService {
     device: string;
     ssid: string;
     ip: string;
+    userId?: string;
     timestamp: Date;
   }>();
 
@@ -243,16 +244,34 @@ export class DeviceService {
       device: dto.device,
       ssid: dto.ssid,
       ip: dto.ip,
+      userId: dto.userId,
       timestamp: new Date(),
     });
 
     console.log(`[ESP32] Dispositivo ${dto.device} registrado en memoria`);
+    if (dto.userId) {
+      console.log(`[ESP32] User ID asociado: ${dto.userId}`);
+      
+      // Emitir evento SSE al usuario para notificar conexión exitosa
+      this.deviceEventsService.emitDeviceConnection({
+        userId: parseInt(dto.userId),
+        deviceId: 0, // No tenemos ID de BD aún
+        macAddress: dto.device,
+        status: 'connected',
+        ssid: dto.ssid,
+        rssi: 0,
+        ip: dto.ip,
+        timestamp: new Date(),
+      });
+      console.log(`[ESP32] Evento SSE emitido al usuario ${dto.userId}`);
+    }
     console.log(`[ESP32] Total dispositivos en memoria: ${this.connectedDevices.size}`);
 
     return {
       success: true,
       message: 'Conexión registrada en memoria',
       device: dto.device,
+      userId: dto.userId,
     };
   }
 
@@ -270,6 +289,7 @@ export class DeviceService {
         device: deviceInfo.device,
         ssid: deviceInfo.ssid,
         ip: deviceInfo.ip,
+        userId: deviceInfo.userId,
         timestamp: deviceInfo.timestamp,
       };
     }
