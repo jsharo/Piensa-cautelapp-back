@@ -11,11 +11,11 @@ import { DeviceEventsService } from './device-events.service';
 export class DeviceService {
   // Almacenamiento temporal en memoria de dispositivos conectados (no persistente)
   private connectedDevices = new Map<string, {
-    device: string;
+    deviceId: string;
     ssid: string;
     ip: string;
+    rssi?: number;
     userId?: string;
-    timestamp: Date;
   }>();
 
   constructor(
@@ -240,28 +240,26 @@ export class DeviceService {
     console.log('[ESP32] Notificación de conexión recibida:', dto);
 
     // Guardar el estado de conexión en memoria
-    this.connectedDevices.set(dto.device, {
-      device: dto.device,
+    this.connectedDevices.set(dto.deviceId, {
+      deviceId: dto.deviceId,
       ssid: dto.ssid,
       ip: dto.ip,
+      rssi: dto.rssi,
       userId: dto.userId,
-      timestamp: new Date(),
     });
 
-    console.log(`[ESP32] Dispositivo ${dto.device} registrado en memoria`);
+    console.log(`[ESP32] Dispositivo ${dto.deviceId} registrado en memoria`);
     if (dto.userId) {
       console.log(`[ESP32] User ID asociado: ${dto.userId}`);
       
       // Emitir evento SSE al usuario para notificar conexión exitosa
       this.deviceEventsService.emitDeviceConnection({
+        deviceId: dto.deviceId,
         userId: parseInt(dto.userId),
-        deviceId: 0, // No tenemos ID de BD aún
-        macAddress: dto.device,
-        status: 'connected',
         ssid: dto.ssid,
-        rssi: 0,
         ip: dto.ip,
-        timestamp: new Date(),
+        rssi: dto.rssi || 0,
+        status: 'connected',
       });
       console.log(`[ESP32] Evento SSE emitido al usuario ${dto.userId}`);
     }
@@ -270,7 +268,7 @@ export class DeviceService {
     return {
       success: true,
       message: 'Conexión registrada en memoria',
-      device: dto.device,
+      deviceId: dto.deviceId,
       userId: dto.userId,
     };
   }
@@ -286,11 +284,11 @@ export class DeviceService {
       console.log(`[ESP32] Dispositivo ${deviceName} encontrado: conectado`);
       return {
         connected: true,
-        device: deviceInfo.device,
+        deviceId: deviceInfo.deviceId,
         ssid: deviceInfo.ssid,
         ip: deviceInfo.ip,
+        rssi: deviceInfo.rssi,
         userId: deviceInfo.userId,
-        timestamp: deviceInfo.timestamp,
       };
     }
 

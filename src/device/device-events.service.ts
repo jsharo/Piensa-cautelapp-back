@@ -2,14 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { Subject } from 'rxjs';
 
 export interface DeviceConnectionEvent {
+  deviceId: string;
   userId: number;
-  deviceId: number;
-  macAddress: string;
-  status: string;
   ssid: string;
-  rssi: number;
   ip?: string;
-  timestamp: Date;
+  rssi: number;
+  status: string;
 }
 
 @Injectable()
