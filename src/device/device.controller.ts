@@ -62,9 +62,20 @@ export class DeviceController {
     return this.deviceService.update(+id, updateDeviceDto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.deviceService.remove(+id);
+  remove(@Req() req: any, @Param('id') id: string) {
+    const userId = req.user.id_usuario;
+    console.log(`[CONTROLLER] DELETE /device/${id} - Usuario ${userId}`);
+    return this.deviceService.stopMonitoringDevice(userId, +id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('stop-monitoring/:adultoId')
+  stopMonitoring(@Req() req: any, @Param('adultoId') adultoId: string) {
+    const userId = req.user.id_usuario;
+    console.log(`[CONTROLLER] POST /device/stop-monitoring/${adultoId} - Usuario ${userId}`);
+    return this.deviceService.stopMonitoringDevice(userId, +adultoId);
   }
 
   // ============ ESP32 ENDPOINTS ============

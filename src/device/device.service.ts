@@ -95,6 +95,115 @@ export class DeviceService {
     }
   }
 
+  /**
+   * Permite a un usuario dejar de monitorear un dispositivo
+   * Valida que el usuario sea propietario del dispositivo antes de eliminarlo
+   */
+  async stopMonitoringDevice(userId: number, deviceId: number) {
+    try {
+      console.log(`[STOP_MONITORING] Iniciando eliminación para usuario ${userId}, adulto ${deviceId}`);
+
+      // Verificar que el usuario es propietario del dispositivo
+      const adultoMayor = await this.prisma.adultoMayor.findUnique({
+        where: { id_adulto: deviceId },
+        include: { dispositivo: true }
+      });
+
+      if (!adultoMayor) {
+        console.error(`[STOP_MONITORING] AdultoMayor ${deviceId} no encontrado`);
+        throw new NotFoundException('Dispositivo no encontrado');
+      }
+
+      console.log(`[STOP_MONITORING] AdultoMayor encontrado:`, {
+        id_adulto: adultoMayor.id_adulto,
+        nombre: adultoMayor.nombre,
+        id_dispositivo: adultoMayor.id_dispositivo
+      });
+
+      // Verificar la relación usuario-adulto
+      const relacion = await this.prisma.usuarioAdultoMayor.findUnique({
+        where: {
+          id_usuario_id_adulto: {
+            id_usuario: userId,
+            id_adulto: deviceId,
+          },
+        },
+      });
+
+      if (!relacion) {
+        console.error(`[STOP_MONITORING] Usuario ${userId} no tiene relación con adulto ${deviceId}`);
+        throw new ForbiddenException('No tienes permiso para dejar de monitorear este dispositivo');
+      }
+
+      console.log(`[STOP_MONITORING] Relación usuario-adulto verificada. Eliminando...`);
+
+      // Eliminar la relación usuario-adulto mayor
+      await this.prisma.usuarioAdultoMayor.delete({
+        where: {
+          id_usuario_id_adulto: {
+            id_usuario: userId,
+            id_adulto: deviceId,
+          },
+        },
+      });
+      console.log(`[STOP_MONITORING] ✓ Relación UsuarioAdultoMayor eliminada`);
+
+      // Verificar si el adulto mayor tiene otras relaciones con otros usuarios
+      const otrasRelaciones = await this.prisma.usuarioAdultoMayor.findMany({
+        where: { id_adulto: deviceId },
+      });
+
+      console.log(`[STOP_MONITORING] Otras relaciones del adulto: ${otrasRelaciones.length}`);
+
+      // Si no hay otras relaciones, eliminar el adulto mayor y el dispositivo
+      if (otrasRelaciones.length === 0) {
+        const dispositivo = adultoMayor.id_dispositivo;
+        
+        console.log(`[STOP_MONITORING] Sin otras relaciones, eliminando AdultoMayor...`);
+
+        // Eliminar el adulto mayor
+        await this.prisma.adultoMayor.delete({
+          where: { id_adulto: deviceId },
+        });
+        console.log(`[STOP_MONITORING] ✓ AdultoMayor ${deviceId} eliminado`);
+
+        // Eliminar el dispositivo si no tiene otros adultos mayores vinculados
+        if (dispositivo) {
+          console.log(`[STOP_MONITORING] Verificando si dispositivo ${dispositivo} tiene otros adultos...`);
+          const otrosAdultos = await this.prisma.adultoMayor.findMany({
+            where: { id_dispositivo: dispositivo },
+          });
+
+          console.log(`[STOP_MONITORING] Otros adultos en dispositivo: ${otrosAdultos.length}`);
+
+          if (otrosAdultos.length === 0) {
+            console.log(`[STOP_MONITORING] Eliminando Dispositivo ${dispositivo}...`);
+            await this.prisma.dispositivo.delete({
+              where: { id_dispositivo: dispositivo },
+            });
+            console.log(`[STOP_MONITORING] ✓ Dispositivo ${dispositivo} eliminado`);
+          } else {
+            console.log(`[STOP_MONITORING] Dispositivo ${dispositivo} no eliminado (aún tiene adultos)`);
+          }
+        }
+      } else {
+        console.log(`[STOP_MONITORING] Adulto ${deviceId} NO eliminado (otras relaciones existen)`);
+      }
+
+      console.log(`[STOP_MONITORING] ✓ Proceso completado exitosamente`);
+      return { success: true, message: 'Dispositivo eliminado completamente' };
+    } catch (error) {
+      console.error(`[STOP_MONITORING] ✗ Error en eliminación:`, error);
+      if (error.code === 'P2025') {
+        throw new NotFoundException('Dispositivo o relación no encontrada');
+      }
+      if (error instanceof ForbiddenException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw error;
+    }
+  }
+
   async vincularDispositivoAUsuario(userId: number, dto: VincularDispositivoDto) {
     // 1. Verificar si el dispositivo ya existe
     let dispositivo = await this.prisma.dispositivo.findUnique({
