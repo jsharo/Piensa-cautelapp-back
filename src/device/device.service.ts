@@ -597,5 +597,79 @@ export class DeviceService {
       return { bpm: null, timestamp: null };
     }
   }
+
+  /**
+   * Método de debug para verificar los últimos datos de sensores recibidos
+   */
+  async getLatestSensorDataForDebug() {
+    try {
+      const latestData = await this.prisma.sensorData.findMany({
+        take: 10,
+        orderBy: { received_at: 'desc' },
+        include: {
+          dispositivo: {
+            include: {
+              adultos: {
+                select: {
+                  nombre: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Últimos 10 registros de sensor data recibidos del ESP32',
+        count: latestData.length,
+        data: latestData.map(record => ({
+          id: record.id_sensor,
+          deviceId: record.id_dispositivo,
+          deviceMac: record.dispositivo.mac_address,
+          adultoMayor: record.dispositivo.adultos.length > 0
+            ? record.dispositivo.adultos[0].nombre
+            : 'Sin vincular',
+          timestamp: record.timestamp,
+          receivedAt: record.received_at,
+          bpm: record.max_avg_bpm || record.max_bpm,
+          aceleracion: record.mpu_acceleration,
+          fallDetected: record.mpu_fall_detected,
+          stable: record.mpu_stable,
+          status: record.mpu_status,
+          battery: record.battery,
+          wifi: record.wifi_ssid ? {
+            ssid: record.wifi_ssid,
+            rssi: record.wifi_rssi,
+          } : null,
+          minutesAgo: Math.round((Date.now() - new Date(record.received_at).getTime()) / 60000),
+        })),
+      };
+    } catch (error) {
+      console.error('[DEBUG] Error obteniendo sensor data:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Método de debug para ver dispositivos conectados en memoria
+   */
+  getConnectedDevicesDebug() {
+    const devices = Array.from(this.connectedDevices.entries()).map(([key, value]) => ({
+      key,
+      ...value,
+    }));
+
+    return {
+      success: true,
+      count: devices.length,
+      devices,
+      message: `${devices.length} dispositivo(s) conectado(s) en memoria`,
+    };
+  }
 }
+
 

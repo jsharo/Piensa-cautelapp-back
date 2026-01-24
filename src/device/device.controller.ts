@@ -159,4 +159,21 @@ export class DeviceController {
     const id = parseInt(deviceId);
     return this.deviceService.getLatestBpm(id);
   }
+
+  /**
+   * Endpoint de debug para verificar los últimos datos recibidos del ESP32
+   * Muestra los últimos 10 registros de sensor data
+   */
+  @Get('debug/latest-sensor-data')
+  async getLatestSensorData() {
+    return this.deviceService.getLatestSensorDataForDebug();
+  }
+
+  /**
+   * Endpoint de debug para verificar los dispositivos conectados en memoria
+   */
+  @Get('debug/connected-devices')
+  getConnectedDevices() {
+    return this.deviceService.getConnectedDevicesDebug();
+  }
 }
