@@ -6,6 +6,8 @@ import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
 import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
+import { Esp32MaxDataDto } from './dto/esp32-max-data.dto';
+import { Esp32MpuAlertDto } from './dto/esp32-mpu-alert.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { SseJwtAuthGuard } from '../auth/sse-jwt.guard';
 import { DeviceEventsService } from './device-events.service';
@@ -106,10 +108,35 @@ export class DeviceController {
    * Endpoint para recibir datos de sensores del ESP32
    * No requiere autenticación ya que es llamado por el dispositivo
    * Recibe datos de: MPU6050 (aceleración, detección de caídas) y MAX30102 (ritmo cardíaco)
+   * 
+   * ⚠️ DEPRECADO: Este endpoint se mantiene para compatibilidad con código antiguo
+   * Usar en su lugar: /esp32/sensor-data/max o /esp32/sensor-data/mpu-alert
    */
   @Post('esp32/sensor-data')
   handleEsp32SensorData(@Body() dto: Esp32SensorDataDto) {
     return this.deviceService.handleEsp32SensorData(dto);
+  }
+
+  /**
+   * ⭐ NUEVO: Endpoint para recibir datos del sensor MAX30102 (cada 5 segundos)
+   * El ESP32 envía datos periódicos de ritmo cardíaco
+   * No requiere autenticación ya que es llamado por el dispositivo
+   */
+  @Post('esp32/sensor-data/max')
+  handleEsp32MaxData(@Body() dto: Esp32MaxDataDto) {
+    console.log('[CONTROLLER] Datos MAX30102 recibidos');
+    return this.deviceService.handleEsp32MaxData(dto);
+  }
+
+  /**
+   * ⭐ NUEVO: Endpoint para recibir alertas del sensor MPU6050 (solo cuando detecta desmayo)
+   * El ESP32 envía esta alerta solo cuando confirma un desmayo
+   * No requiere autenticación ya que es llamado por el dispositivo
+   */
+  @Post('esp32/sensor-data/mpu-alert')
+  handleEsp32MpuAlert(@Body() dto: Esp32MpuAlertDto) {
+    console.log('[CONTROLLER] ⚠️ Alerta MPU6050 recibida');
+    return this.deviceService.handleEsp32MpuAlert(dto);
   }
 
   /**

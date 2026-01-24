@@ -198,6 +198,11 @@ model SensorData {
   wifi_ssid       String?     // SSID de la red WiFi
   wifi_rssi       Int?        // Intensidad de la señal WiFi
 
+  // Clasificación del dato
+  sensor_type     String?     // Tipo de sensor: "MAX30102", "MPU6050"
+  alert_type      String?     // Tipo de alerta: "DESMAYO_CONFIRMADO", null si es lectura normal
+  is_alert        Boolean     @default(false) // true para alertas urgentes, false para datos normales
+
   // Metadata
   timestamp       DateTime    @default(now()) // Cuándo se recibieron los datos
   received_at     DateTime    @default(now()) // Cuándo el backend recibió esto

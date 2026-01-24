@@ -5,6 +5,8 @@ import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
 import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
+import { Esp32MaxDataDto } from './dto/esp32-max-data.dto';
+import { Esp32MpuAlertDto } from './dto/esp32-mpu-alert.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeviceEventsService } from './device-events.service';
 
@@ -670,6 +672,235 @@ export class DeviceService {
       message: `${devices.length} dispositivo(s) conectado(s) en memoria`,
     };
   }
+
+  // ============ NUEVOS MÉTODOS PARA ESP32 ============
+
+  /**
+   * ⭐ NUEVO: Procesa y almacena datos del sensor MAX30102 (cada 5 segundos)
+   * Recibe datos periódicos de ritmo cardíaco del ESP32
+   */
+  async handleEsp32MaxData(dto: Esp32MaxDataDto) {
+    console.log('[ESP32-MAX] Datos MAX30102 recibidos:', {
+      deviceId: dto.deviceId,
+      bpm: dto.max_bpm,
+      avgBpm: dto.max_avg_bpm,
+      irValue: dto.max_ir_value,
+      battery: dto.battery,
+    });
+
+    try {
+      // 1. Buscar o crear el dispositivo por device_id
+      let dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { device_id: dto.deviceId },
+      });
+
+      if (!dispositivo) {
+        console.log(`[ESP32-MAX] Dispositivo ${dto.deviceId} no encontrado, creando...`);
+        dispositivo = await this.prisma.dispositivo.create({
+          data: {
+            device_id: dto.deviceId,
+            bateria: dto.battery ?? 100,
+            online_status: true,
+            last_seen: new Date(),
+          },
+        });
+      } else {
+        // Actualizar estado de conexión y batería
+        dispositivo = await this.prisma.dispositivo.update({
+          where: { id_dispositivo: dispositivo.id_dispositivo },
+          data: {
+            online_status: true,
+            last_seen: new Date(),
+            bateria: dto.battery,
+          },
+        });
+      }
+
+      // 2. Guardar datos del MAX30102 en la tabla SensorData
+      const sensorData = await this.prisma.sensorData.create({
+        data: {
+          id_dispositivo: dispositivo.id_dispositivo,
+          // Datos MAX30102
+          max_ir_value: dto.max_ir_value,
+          max_bpm: dto.max_bpm,
+          max_avg_bpm: dto.max_avg_bpm,
+          max_connected: dto.max_connected,
+          // Información general
+          battery: dto.battery,
+          wifi_rssi: dto.wifi_rssi,
+          // Clasificación
+          sensor_type: dto.sensor_type, // "MAX30102"
+          is_alert: false, // Los datos del MAX no son alertas
+          // Timestamps
+          timestamp: new Date(dto.timestamp),
+          received_at: new Date(),
+        },
+      });
+
+      console.log(
+        `[ESP32-MAX] ✓ Datos guardados. ID: ${sensorData.id_sensor}, BPM: ${dto.max_bpm}, Avg: ${dto.max_avg_bpm}`
+      );
+
+      // 3. Emitir evento SSE si hay userId
+      if (dto.userId) {
+        this.deviceEventsService.emitSensorData({
+          deviceId: dto.deviceId,
+          userId: parseInt(dto.userId),
+          mpu_fall_detected: false,
+          max_bpm: dto.max_bpm,
+          battery: dto.battery,
+        });
+      }
+
+      return {
+        success: true,
+        message: 'Datos MAX30102 registrados correctamente',
+        deviceId: dto.deviceId,
+        sensorDataId: sensorData.id_sensor,
+        bpm: dto.max_bpm,
+        avgBpm: dto.max_avg_bpm,
+      };
+    } catch (error) {
+      console.error('[ESP32-MAX] ✗ Error al procesar datos MAX30102:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ⭐ NUEVO: Procesa y almacena alertas del sensor MPU6050 (solo cuando detecta desmayo)
+   * Crea una notificación y emite eventos SSE urgentes
+   */
+  async handleEsp32MpuAlert(dto: Esp32MpuAlertDto) {
+    console.log('[ESP32-MPU] ⚠️⚠️⚠️ ALERTA DE DESMAYO RECIBIDA ⚠️⚠️⚠️');
+    console.log('[ESP32-MPU] Datos:', {
+      deviceId: dto.deviceId,
+      alertType: dto.alert_type,
+      acceleration: dto.mpu_acceleration,
+      status: dto.mpu_status,
+    });
+
+    try {
+      // 1. Buscar o crear el dispositivo
+      let dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { device_id: dto.deviceId },
+      });
+
+      if (!dispositivo) {
+        console.log(`[ESP32-MPU] Dispositivo ${dto.deviceId} no encontrado, creando...`);
+        dispositivo = await this.prisma.dispositivo.create({
+          data: {
+            device_id: dto.deviceId,
+            bateria: dto.battery ?? 100,
+            online_status: true,
+            last_seen: new Date(),
+          },
+        });
+      } else {
+        // Actualizar estado
+        dispositivo = await this.prisma.dispositivo.update({
+          where: { id_dispositivo: dispositivo.id_dispositivo },
+          data: {
+            online_status: true,
+            last_seen: new Date(),
+            bateria: dto.battery,
+          },
+        });
+      }
+
+      // 2. Guardar alerta en SensorData
+      const sensorData = await this.prisma.sensorData.create({
+        data: {
+          id_dispositivo: dispositivo.id_dispositivo,
+          // Datos MPU6050
+          mpu_acceleration: dto.mpu_acceleration,
+          mpu_fall_detected: dto.mpu_fall_detected,
+          mpu_stable: dto.mpu_stable,
+          mpu_status: dto.mpu_status,
+          // Información general
+          battery: dto.battery,
+          wifi_ssid: dto.wifi_ssid,
+          wifi_rssi: dto.wifi_rssi,
+          // Clasificación (IMPORTANTE)
+          sensor_type: dto.sensor_type, // "MPU6050"
+          alert_type: dto.alert_type, // "DESMAYO_CONFIRMADO"
+          is_alert: true, // ⚠️ ESTO ES UNA ALERTA URGENTE
+          // Timestamps
+          timestamp: new Date(dto.timestamp),
+          received_at: new Date(),
+        },
+      });
+
+      console.log(`[ESP32-MPU] ✓ Alerta guardada. ID: ${sensorData.id_sensor}`);
+
+      // 3. Crear notificación y emitir evento SSE
+      await this.handleMpuFallAlert(dispositivo.id_dispositivo, dto);
+
+      return {
+        success: true,
+        message: '⚠️ Alerta de desmayo procesada',
+        deviceId: dto.deviceId,
+        sensorDataId: sensorData.id_sensor,
+        alertType: dto.alert_type,
+        acceleration: dto.mpu_acceleration,
+      };
+    } catch (error) {
+      console.error('[ESP32-MPU] ✗ Error al procesar alerta MPU:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ⭐ NUEVO: Maneja la creación de notificaciones para alertas de desmayo del MPU6050
+   */
+  private async handleMpuFallAlert(
+    dispositivoId: number,
+    alertData: Esp32MpuAlertDto
+  ) {
+    console.log(`[MPU-ALERT] Procesando alerta de desmayo para dispositivo ID ${dispositivoId}`);
+
+    try {
+      // Buscar el adulto mayor asociado a este dispositivo
+      const adultoMayor = await this.prisma.adultoMayor.findFirst({
+        where: { id_dispositivo: dispositivoId },
+        include: { usuariosAdultoMayor: { select: { id_usuario: true } } },
+      });
+
+      if (!adultoMayor) {
+        console.warn(
+          `[MPU-ALERT] ⚠ No se encontró adulto mayor para el dispositivo ${dispositivoId}`
+        );
+        return;
+      }
+
+      // Crear notificación de desmayo
+      const notificacion = await this.prisma.notificaciones.create({
+        data: {
+          id_adulto: adultoMayor.id_adulto,
+          tipo: 'DESMAYO',
+          fecha_hora: new Date(),
+          mensaje: `⚠️ ${alertData.alert_type} - Aceleración: ${alertData.mpu_acceleration.toFixed(2)} g - ${alertData.mpu_status}`,
+        },
+      });
+
+      console.log(
+        `[MPU-ALERT] ✓ Notificación de desmayo creada para ${adultoMayor.nombre}:`,
+        notificacion
+      );
+
+      // Emitir evento SSE urgente a todos los usuarios que monitorean a este adulto
+      for (const relacion of adultoMayor.usuariosAdultoMayor) {
+        this.deviceEventsService.emitNotification({
+          id_notificacion: notificacion.id_notificacion,
+          userId: relacion.id_usuario,
+          tipo: 'DESMAYO',
+          usuario: adultoMayor.nombre,
+          mensaje: notificacion.mensaje || `⚠️ Desmayo confirmado`,
+          fecha_hora: notificacion.fecha_hora.toISOString(),
+        });
+        console.log(`[MPU-ALERT] 🔔 Notificación enviada al usuario ${relacion.id_usuario}`);
+      }
+    } catch (error) {
+      console.error('[MPU-ALERT] ✗ Error al crear notificación de desmayo:', error);
+    }
+  }
 }
-
-
