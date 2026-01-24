@@ -524,6 +524,7 @@ export class DeviceService {
       // Buscar el adulto mayor asociado a este dispositivo
       const adultoMayor = await this.prisma.adultoMayor.findFirst({
         where: { id_dispositivo: dispositivoId },
+        include: { usuariosAdultoMayor: { select: { id_usuario: true } } },
       });
 
       if (!adultoMayor) {
@@ -537,7 +538,7 @@ export class DeviceService {
       const notificacion = await this.prisma.notificaciones.create({
         data: {
           id_adulto: adultoMayor.id_adulto,
-          tipo: 'CAIDA', // Tipo de notificación
+          tipo: 'CAIDA',
           fecha_hora: new Date(),
           pulso: sensorData.max_avg_bpm || undefined,
           mensaje: `Caída detectada - Aceleración: ${sensorData.mpu_acceleration?.toFixed(2) || 'N/A'} g`,
@@ -548,9 +549,52 @@ export class DeviceService {
         `[FALL-DETECTION] ✓ Notificación de caída creada para ${adultoMayor.nombre}:`,
         notificacion
       );
+
+      // Emitir evento de notificación a todos los usuarios que monitorean este adulto mayor
+      for (const relacion of adultoMayor.usuariosAdultoMayor) {
+        this.deviceEventsService.emitNotification({
+          id_notificacion: notificacion.id_notificacion,
+          userId: relacion.id_usuario,
+          tipo: 'CAIDA',
+          usuario: adultoMayor.nombre,
+          mensaje: notificacion.mensaje,
+          fecha_hora: notificacion.fecha_hora.toISOString(),
+          pulso: notificacion.pulso || undefined,
+        });
+        console.log(`[FALL-DETECTION] Evento emitido al usuario ${relacion.id_usuario}`);
+      }
     } catch (error) {
       console.error('[FALL-DETECTION] ✗ Error al crear notificación de caída:', error);
-      // No lanzar error, solo registrar para que no afecte el flujo principal
+    }
+  }
+
+  /**
+   * Obtiene el último BPM registrado de un dispositivo
+   */
+  async getLatestBpm(deviceId: number) {
+    try {
+      const latestSensorData = await this.prisma.sensorData.findFirst({
+        where: { id_dispositivo: deviceId },
+        orderBy: { received_at: 'desc' },
+        select: {
+          max_avg_bpm: true,
+          max_bpm: true,
+          timestamp: true,
+          received_at: true,
+        },
+      });
+
+      if (!latestSensorData) {
+        return { bpm: null, timestamp: null };
+      }
+
+      return {
+        bpm: latestSensorData.max_avg_bpm || latestSensorData.max_bpm || 0,
+        timestamp: latestSensorData.timestamp || latestSensorData.received_at,
+      };
+    } catch (error) {
+      console.error('[GET-BPM] Error obteniendo BPM:', error);
+      return { bpm: null, timestamp: null };
     }
   }
 }

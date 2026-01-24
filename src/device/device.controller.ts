@@ -130,4 +130,33 @@ export class DeviceController {
       } as MessageEvent))
     );
   }
+
+  /**
+   * SSE endpoint para que el frontend escuche eventos de notificaciones
+   * Requiere autenticación y solo envía eventos del usuario autenticado
+   */
+  @UseGuards(SseJwtAuthGuard)
+  @Sse('events/notifications')
+  notificationEvents(@Req() req: any): Observable<MessageEvent> {
+    const userId = req.user.id_usuario;
+    console.log(`[SSE] Usuario ${userId} conectado a eventos de notificaciones`);
+
+    return this.deviceEventsService.notification$.pipe(
+      filter(event => event.userId === userId),
+      map(event => ({
+        data: event,
+      } as MessageEvent))
+    );
+  }
+
+  /**
+   * Obtiene el último BPM registrado de un dispositivo
+   * Usado por el frontend para mostrar el pulso actual en tiempo real
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('latest-bpm/:deviceId')
+  async getLatestBpm(@Param('deviceId') deviceId: string) {
+    const id = parseInt(deviceId);
+    return this.deviceService.getLatestBpm(id);
+  }
 }

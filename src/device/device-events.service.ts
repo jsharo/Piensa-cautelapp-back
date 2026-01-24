@@ -18,6 +18,16 @@ export interface SensorDataEvent {
   battery: number;
 }
 
+export interface NotificationEvent {
+  id_notificacion: number;
+  userId: number;
+  tipo: string;
+  usuario: string;
+  mensaje: string;
+  fecha_hora: string;
+  pulso?: number;
+}
+
 @Injectable()
 export class DeviceEventsService {
   // Subject para emitir eventos de conexión de dispositivos
@@ -26,9 +36,13 @@ export class DeviceEventsService {
   // Subject para emitir eventos de datos de sensores
   private sensorDataSubject = new Subject<SensorDataEvent>();
 
+  // Subject para emitir eventos de notificaciones
+  private notificationSubject = new Subject<NotificationEvent>();
+
   // Observable público para que los controladores puedan suscribirse
   public deviceConnection$ = this.deviceConnectionSubject.asObservable();
   public sensorData$ = this.sensorDataSubject.asObservable();
+  public notification$ = this.notificationSubject.asObservable();
 
   /**
    * Emite un evento de conexión de dispositivo
@@ -44,5 +58,13 @@ export class DeviceEventsService {
   emitSensorData(event: SensorDataEvent) {
     console.log('[DeviceEventsService] Emitiendo evento de datos de sensores:', event);
     this.sensorDataSubject.next(event);
+  }
+
+  /**
+   * Emite un evento de notificación
+   */
+  emitNotification(event: NotificationEvent) {
+    console.log('[DeviceEventsService] Emitiendo evento de notificación:', event);
+    this.notificationSubject.next(event);
   }
 }
