@@ -4,6 +4,7 @@ import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
+import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeviceEventsService } from './device-events.service';
 
@@ -416,4 +417,141 @@ export class DeviceService {
     console.log(`[ESP32] Estado de ${deviceName} eliminado de memoria: ${removed}`);
     return { success: removed };
   }
+
+  /**
+   * Procesa y almacena datos de sensores enviados por el ESP32
+   * Recibe datos de MPU6050 (aceleración, detección de caídas) y MAX30102 (ritmo cardíaco)
+   * Los datos se guardan en la tabla SensorData para análisis histórico
+   */
+  async handleEsp32SensorData(dto: Esp32SensorDataDto) {
+    console.log('[ESP32-SENSORS] Datos de sensores recibidos:', dto);
+
+    try {
+      // 1. Buscar o crear el dispositivo por device_id
+      let dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { device_id: dto.deviceId },
+      });
+
+      if (!dispositivo) {
+        console.log(`[ESP32-SENSORS] Dispositivo ${dto.deviceId} no encontrado, creando...`);
+        dispositivo = await this.prisma.dispositivo.create({
+          data: {
+            device_id: dto.deviceId,
+            bateria: dto.battery ?? 100,
+            online_status: true,
+            last_seen: new Date(),
+          },
+        });
+      } else {
+        // Actualizar estado de conexión y batería
+        dispositivo = await this.prisma.dispositivo.update({
+          where: { id_dispositivo: dispositivo.id_dispositivo },
+          data: {
+            online_status: true,
+            last_seen: new Date(),
+            ...(dto.battery !== undefined && { bateria: dto.battery }),
+          },
+        });
+      }
+
+      // 2. Guardar datos de sensores en la tabla SensorData
+      const sensorData = await this.prisma.sensorData.create({
+        data: {
+          id_dispositivo: dispositivo.id_dispositivo,
+          // Datos MPU6050
+          mpu_acceleration: dto.mpu_acceleration,
+          mpu_fall_detected: dto.mpu_fall_detected,
+          mpu_stable: dto.mpu_stable,
+          mpu_status: dto.mpu_status,
+          // Datos MAX30102
+          max_ir_value: dto.max_ir_value,
+          max_bpm: dto.max_bpm,
+          max_avg_bpm: dto.max_avg_bpm,
+          max_connected: dto.max_connected,
+          // Información general
+          battery: dto.battery,
+          wifi_ssid: dto.wifi_ssid,
+          wifi_rssi: dto.wifi_rssi,
+          // Timestamps
+          timestamp: dto.timestamp ? new Date(dto.timestamp) : new Date(),
+        },
+      });
+
+      console.log(
+        `[ESP32-SENSORS] ✓ Datos de sensor guardados. Dispositivo: ${dispositivo.device_id}, BPM: ${dto.max_bpm}, Caída: ${dto.mpu_fall_detected}`
+      );
+
+      // 3. Si se detectó una caída, crear una notificación
+      if (dto.mpu_fall_detected && dispositivo) {
+        await this.handleFallDetection(dispositivo.id_dispositivo, dto);
+      }
+
+      // 4. Emitir evento SSE si el usuario está disponible
+      if (dto.userId) {
+        this.deviceEventsService.emitSensorData({
+          deviceId: dto.deviceId,
+          userId: parseInt(dto.userId),
+          mpu_fall_detected: dto.mpu_fall_detected || false,
+          max_bpm: dto.max_bpm || 0,
+          battery: dto.battery || 0,
+        });
+        console.log(`[ESP32-SENSORS] Evento SSE emitido al usuario ${dto.userId}`);
+      }
+
+      return {
+        success: true,
+        message: 'Datos de sensores registrados correctamente',
+        deviceId: dto.deviceId,
+        sensorDataId: sensorData.id_sensor,
+      };
+    } catch (error) {
+      console.error('[ESP32-SENSORS] ✗ Error al procesar datos de sensores:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Maneja la detección de caídas del ESP32
+   * Crea una notificación y busca el adulto mayor asociado al dispositivo
+   */
+  private async handleFallDetection(
+    dispositivoId: number,
+    sensorData: Esp32SensorDataDto
+  ) {
+    console.log(`[FALL-DETECTION] Caída detectada en dispositivo ${sensorData.deviceId}`);
+
+    try {
+      // Buscar el adulto mayor asociado a este dispositivo
+      const adultoMayor = await this.prisma.adultoMayor.findFirst({
+        where: { id_dispositivo: dispositivoId },
+      });
+
+      if (!adultoMayor) {
+        console.warn(
+          `[FALL-DETECTION] ⚠ No se encontró adulto mayor para el dispositivo ${dispositivoId}`
+        );
+        return;
+      }
+
+      // Crear una notificación de caída
+      const notificacion = await this.prisma.notificaciones.create({
+        data: {
+          id_adulto: adultoMayor.id_adulto,
+          tipo: 'CAIDA', // Tipo de notificación
+          fecha_hora: new Date(),
+          pulso: sensorData.max_avg_bpm || undefined,
+          mensaje: `Caída detectada - Aceleración: ${sensorData.mpu_acceleration?.toFixed(2) || 'N/A'} g`,
+        },
+      });
+
+      console.log(
+        `[FALL-DETECTION] ✓ Notificación de caída creada para ${adultoMayor.nombre}:`,
+        notificacion
+      );
+    } catch (error) {
+      console.error('[FALL-DETECTION] ✗ Error al crear notificación de caída:', error);
+      // No lanzar error, solo registrar para que no afecte el flujo principal
+    }
+  }
 }
+

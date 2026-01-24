@@ -5,6 +5,7 @@ import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
+import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { SseJwtAuthGuard } from '../auth/sse-jwt.guard';
 import { DeviceEventsService } from './device-events.service';
@@ -99,6 +100,16 @@ export class DeviceController {
       return { error: 'Parámetro "device" requerido' };
     }
     return this.deviceService.checkDeviceConnectionStatus(deviceName);
+  }
+
+  /**
+   * Endpoint para recibir datos de sensores del ESP32
+   * No requiere autenticación ya que es llamado por el dispositivo
+   * Recibe datos de: MPU6050 (aceleración, detección de caídas) y MAX30102 (ritmo cardíaco)
+   */
+  @Post('esp32/sensor-data')
+  handleEsp32SensorData(@Body() dto: Esp32SensorDataDto) {
+    return this.deviceService.handleEsp32SensorData(dto);
   }
 
   /**
