@@ -23,7 +23,7 @@ export interface NotificationEvent {
   userId: number;
   tipo: string;
   usuario: string;
-  mensaje: string;
+  mensaje?: string;  // ⭐ CAMBIO: Hacer opcional para permitir null
   fecha_hora: string;
   pulso?: number;
 }

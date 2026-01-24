@@ -13,7 +13,8 @@
 #include <MPU6050.h>
 #include "MAX30105.h"
 #include "heartRate.h"
-#include <time.h>  // Para timestamps
+#include <time.h>              // Para timestamps
+#include <sntp.h>              // Para sincronización NTP
 
 // ================= CONFIGURACIÓN BLE/WIFI =================
 #define BLE_DEVICE_NAME       "CautelApp-D1"
@@ -67,6 +68,8 @@ bool newCredentials = false;
 bool bleEnabled = false;
 bool bleShuttingDown = false;
 bool backendNotified = false;
+bool ntpSynced = false;              // ⭐ NUEVO: Control de sincronización NTP
+unsigned long lastNtpSync = 0;       // ⭐ NUEVO: Última sincronización NTP
 
 unsigned long stateEntryTime = 0;
 unsigned long wifiConnectStart = 0;
@@ -384,6 +387,41 @@ void changeState(SystemState newState) {
   Serial.println(")");
 }
 
+// ⭐ NUEVA FUNCIÓN: Sincronizar hora via NTP
+void syncTimeWithNTP() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  // Configurar servidores NTP
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  
+  Serial.println("[NTP] Sincronizando hora...");
+  
+  // Esperar a que se sincronice
+  time_t now = time(nullptr);
+  int attempts = 0;
+  while (now < 24 * 3600 && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    now = time(nullptr);
+    attempts++;
+  }
+  Serial.println();
+
+  if (now > 24 * 3600) {
+    ntpSynced = true;
+    lastNtpSync = millis();
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    Serial.print("[NTP] ✓ Hora sincronizada: ");
+    Serial.println(asctime(&timeinfo));
+  } else {
+    Serial.println("[NTP] ✗ Error sincronizando hora");
+    ntpSynced = false;
+  }
+}
+
 void sendBLEStatus(const char* status) {
   if (pStatusChar != NULL && deviceConnected) {
     pStatusChar->setValue(status);
@@ -487,25 +525,36 @@ bool sendSensorDataToBackend() {
 // ⭐ Helper: Obtener timestamp ISO 8601
 String getIsoTimestamp() {
   time_t now = time(nullptr);
-  struct tm* timeinfo = localtime(&now);
+  
+  // Si no hay NTP sincronizado, retornar timestamp de arranque
+  if (!ntpSynced && now < 24 * 3600) {
+    Serial.println("[TIME] Advertencia: Hora no sincronizada");
+  }
+  
+  struct tm timeinfo;
+  localtime_r(&now, &timeinfo);
   char buffer[30];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", timeinfo);
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
   return String(buffer);
 }
 
 // ⭐ Helper: Obtener nivel de batería
 float getBatteryLevel() {
-  // Opción 1: Si tienes un pin analógico para batería
+  // OPCIÓN 1: Usar pin analógico externo (si disponible)
+  // Descomenta esta sección si tienes una batería conectada a BATTERY_PIN (GPIO35)
   // int rawValue = analogRead(BATTERY_PIN);
-  // return map(rawValue, 0, 4095, 0, 100);
+  // float adcVoltage = (rawValue / 4095.0) * 3.3 * 1.1;  // 1.1 es factor de escalado del divisor
+  // float batteryPercentage = ((adcVoltage - 2.8) / (4.2 - 2.8)) * 100.0;
+  // return constrain(batteryPercentage, 0.0, 100.0);
   
-  // Opción 2: Usar voltaje interno del ESP32
-  // uint16_t adc_value = analogRead(ADC_BATTERY_PIN);
-  // float voltage = (adc_value / 4095.0) * 3.3;
-  // return ((voltage - 3.0) / 0.6) * 100;
+  // OPCIÓN 2: Usar voltaje interno del ESP32 (menos preciso pero sin hardware extra)
+  // uint16_t adc_value = analogRead(ADC1_CHANNEL_0);  // GPIO36
+  // float voltage = (adc_value / 4095.0) * 3.6;  // ESP32 ref es 3.6V
+  // return ((voltage - 2.5) / (4.2 - 2.5)) * 100.0;
   
-  // Por ahora: retornar 100 como placeholder
-  return 100;
+  // OPCIÓN 3 (ACTUAL): Placeholder - retorna 100%
+  // TODO: Implementar según tu hardware de batería
+  return 100.0;
 }
 
 // ================= FUNCIONES SENSORES MPU6050 =================
@@ -788,6 +837,11 @@ void stateMachine() {
       break;
 
     case STATE_WIFI_CONNECTED:
+      // ⭐ NUEVO: Sincronizar hora via NTP en conexión
+      if (!ntpSynced && (currentTime - lastNtpSync >= 5000 || lastNtpSync == 0)) {
+        syncTimeWithNTP();
+      }
+      
       // Manejar notificación al backend
       if (!backendNotified) {
         if (previousState == STATE_WIFI_CONNECTING) {
@@ -820,6 +874,7 @@ void stateMachine() {
 
     case STATE_WIFI_ERROR:
       sensorsInitialized = false;
+      ntpSynced = false;  // ⭐ NUEVO: Resetear sincronización en desconexión
       
       if (previousState == STATE_WIFI_CONNECTING) {
         Serial.println("[WiFi] Fallo de conexión");

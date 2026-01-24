@@ -557,7 +557,7 @@ export class DeviceService {
           userId: relacion.id_usuario,
           tipo: 'CAIDA',
           usuario: adultoMayor.nombre,
-          mensaje: notificacion.mensaje,
+          mensaje: notificacion.mensaje || `Caída detectada - Aceleración: ${sensorData.mpu_acceleration?.toFixed(2) || 'N/A'} g`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
           pulso: notificacion.pulso || undefined,
         });
