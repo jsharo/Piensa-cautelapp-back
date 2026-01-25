@@ -222,24 +222,38 @@ export class DeviceService {
 
     console.log('[vincularDispositivoAUsuario] Usuario encontrado:', usuario.email);
 
-    // 1. Verificar si el dispositivo ya existe
-    let dispositivo = await this.prisma.dispositivo.findUnique({
-      where: { mac_address: dto.mac_address },
+    // 1. Verificar si el dispositivo ya existe (buscar por mac_address o device_id)
+    let dispositivo = await this.prisma.dispositivo.findFirst({
+      where: {
+        OR: [
+          { mac_address: dto.mac_address },
+          { device_id: dto.mac_address },
+        ]
+      },
     });
+
+    console.log('[vincularDispositivoAUsuario] Búsqueda de dispositivo:', dispositivo ? `Encontrado ID ${dispositivo.id_dispositivo}` : 'No encontrado');
 
     // 2. Si no existe, crear el dispositivo
     if (!dispositivo) {
+      console.log('[vincularDispositivoAUsuario] Creando nuevo dispositivo...');
       dispositivo = await this.prisma.dispositivo.create({
         data: {
           mac_address: dto.mac_address,
+          device_id: dto.mac_address, // Asignar también como device_id
           bateria: dto.bateria,
         },
       });
+      console.log('[vincularDispositivoAUsuario] Dispositivo creado con ID:', dispositivo.id_dispositivo);
     } else {
-      // Si existe, actualizar la batería
+      console.log('[vincularDispositivoAUsuario] Dispositivo ya existe, actualizando...');
+      // Si existe, actualizar la batería y asegurar que tiene device_id
       dispositivo = await this.prisma.dispositivo.update({
         where: { id_dispositivo: dispositivo.id_dispositivo },
-        data: { bateria: dto.bateria },
+        data: { 
+          bateria: dto.bateria,
+          device_id: dispositivo.device_id || dto.mac_address, // Asegurar que tiene device_id
+        },
       });
     }
 
