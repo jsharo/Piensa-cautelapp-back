@@ -428,43 +428,87 @@ export class DeviceService {
 
   /**
    * Maneja la notificación de conexión WiFi del ESP32
-   * Guarda el estado en memoria (no en BD)
+   * Guarda el estado en memoria Y en la base de datos
    */
   async handleEsp32Connection(dto: Esp32ConnectionDto) {
-    console.log('[ESP32] Notificación de conexión recibida:', dto);
+    console.log('[ESP32-CONN] Notificación de conexión recibida:', dto);
 
-    // Guardar el estado de conexión en memoria
-    this.connectedDevices.set(dto.deviceId, {
-      deviceId: dto.deviceId,
-      ssid: dto.ssid,
-      ip: dto.ip,
-      rssi: dto.rssi,
-      userId: dto.userId,
-    });
+    try {
+      // 1. GUARDAR/ACTUALIZAR EN BASE DE DATOS
+      let dispositivo = await this.prisma.dispositivo.findFirst({
+        where: {
+          OR: [
+            { device_id: dto.deviceId },
+            { mac_address: dto.deviceId },
+          ]
+        }
+      });
 
-    console.log(`[ESP32] Dispositivo ${dto.deviceId} registrado en memoria`);
-    if (dto.userId) {
-      console.log(`[ESP32] User ID asociado: ${dto.userId}`);
-      
-      // Emitir evento SSE al usuario para notificar conexión exitosa
-      this.deviceEventsService.emitDeviceConnection({
+      if (!dispositivo) {
+        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} no existe en BD, creando...`);
+        dispositivo = await this.prisma.dispositivo.create({
+          data: {
+            device_id: dto.deviceId,
+            mac_address: dto.deviceId,
+            bateria: 100, // Valor por defecto al conectar WiFi
+            online_status: true,
+            last_seen: new Date(),
+          },
+        });
+        console.log(`[ESP32-CONN] ✓ Dispositivo creado en BD (ID: ${dispositivo.id_dispositivo})`);
+      } else {
+        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} ya existe en BD (ID: ${dispositivo.id_dispositivo}), actualizando...`);
+        dispositivo = await this.prisma.dispositivo.update({
+          where: { id_dispositivo: dispositivo.id_dispositivo },
+          data: {
+            online_status: true,
+            last_seen: new Date(),
+            mac_address: dispositivo.mac_address || dto.deviceId, // Asegurar que tiene mac_address
+            device_id: dispositivo.device_id || dto.deviceId,     // Asegurar que tiene device_id
+          },
+        });
+        console.log(`[ESP32-CONN] ✓ Dispositivo actualizado en BD`);
+      }
+
+      // 2. GUARDAR EN MEMORIA (para consultas rápidas)
+      this.connectedDevices.set(dto.deviceId, {
         deviceId: dto.deviceId,
-        userId: parseInt(dto.userId),
         ssid: dto.ssid,
         ip: dto.ip,
-        rssi: dto.rssi || 0,
-        status: 'connected',
+        rssi: dto.rssi,
+        userId: dto.userId,
       });
-      console.log(`[ESP32] Evento SSE emitido al usuario ${dto.userId}`);
-    }
-    console.log(`[ESP32] Total dispositivos en memoria: ${this.connectedDevices.size}`);
 
-    return {
-      success: true,
-      message: 'Conexión registrada en memoria',
-      deviceId: dto.deviceId,
-      userId: dto.userId,
-    };
+      console.log(`[ESP32-CONN] ✓ Dispositivo ${dto.deviceId} registrado en memoria`);
+
+      // 3. EMITIR EVENTO SSE AL USUARIO
+      if (dto.userId) {
+        console.log(`[ESP32-CONN] User ID asociado: ${dto.userId}`);
+        
+        this.deviceEventsService.emitDeviceConnection({
+          deviceId: dto.deviceId,
+          userId: parseInt(dto.userId),
+          ssid: dto.ssid,
+          ip: dto.ip,
+          rssi: dto.rssi || 0,
+          status: 'connected',
+        });
+        console.log(`[ESP32-CONN] ✓ Evento SSE emitido al usuario ${dto.userId}`);
+      }
+
+      console.log(`[ESP32-CONN] Total dispositivos en memoria: ${this.connectedDevices.size}`);
+
+      return {
+        success: true,
+        message: 'Conexión registrada en BD y memoria',
+        deviceId: dto.deviceId,
+        dispositivoDbId: dispositivo.id_dispositivo,
+        userId: dto.userId,
+      };
+    } catch (error) {
+      console.error('[ESP32-CONN] ✗ Error al registrar conexión:', error);
+      throw error;
+    }
   }
 
   /**
