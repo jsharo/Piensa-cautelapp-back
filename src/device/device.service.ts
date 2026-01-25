@@ -208,6 +208,20 @@ export class DeviceService {
   }
 
   async vincularDispositivoAUsuario(userId: number, dto: VincularDispositivoDto) {
+    console.log('[vincularDispositivoAUsuario] Iniciando con userId:', userId, 'y dto:', JSON.stringify(dto, null, 2));
+    
+    // 0. Verificar que el usuario existe
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id_usuario: userId },
+    });
+
+    if (!usuario) {
+      console.error(`[vincularDispositivoAUsuario] ERROR: Usuario con ID ${userId} no existe`);
+      throw new Error(`Usuario con ID ${userId} no existe en la base de datos. Verifica que el usuario esté correctamente autenticado.`);
+    }
+
+    console.log('[vincularDispositivoAUsuario] Usuario encontrado:', usuario.email);
+
     // 1. Verificar si el dispositivo ya existe
     let dispositivo = await this.prisma.dispositivo.findUnique({
       where: { mac_address: dto.mac_address },
@@ -253,6 +267,8 @@ export class DeviceService {
     }
 
     // 5. Verificar si ya existe la relación Usuario-AdultoMayor
+    console.log('[vincularDispositivoAUsuario] Verificando relación existente entre userId:', userId, 'y adultoId:', adultoMayor.id_adulto);
+    
     const relacionExistente = await this.prisma.usuarioAdultoMayor.findUnique({
       where: {
         id_usuario_id_adulto: {
@@ -264,12 +280,21 @@ export class DeviceService {
 
     // 6. Si no existe la relación, crearla
     if (!relacionExistente) {
-      await this.prisma.usuarioAdultoMayor.create({
-        data: {
-          id_usuario: userId,
-          id_adulto: adultoMayor.id_adulto,
-        },
-      });
+      console.log('[vincularDispositivoAUsuario] Creando relación Usuario-AdultoMayor');
+      try {
+        await this.prisma.usuarioAdultoMayor.create({
+          data: {
+            id_usuario: userId,
+            id_adulto: adultoMayor.id_adulto,
+          },
+        });
+        console.log('[vincularDispositivoAUsuario] Relación creada exitosamente');
+      } catch (error) {
+        console.error('[vincularDispositivoAUsuario] Error al crear relación:', error);
+        throw error;
+      }
+    } else {
+      console.log('[vincularDispositivoAUsuario] Relación ya existe, no se crea nuevamente');
     }
 
     // 7. Retornar la información completa

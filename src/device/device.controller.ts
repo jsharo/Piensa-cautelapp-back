@@ -27,9 +27,16 @@ export class DeviceController {
 
   @UseGuards(JwtAuthGuard)
   @Post('vincular')
-  vincularDispositivo(@Req() req: any, @Body() dto: VincularDispositivoDto) {
+  async vincularDispositivo(@Req() req: any, @Body() dto: VincularDispositivoDto) {
     const userId = req.user.id_usuario;
-    return this.deviceService.vincularDispositivoAUsuario(userId, dto);
+    console.log('[vincularDispositivo] Usuario:', userId, 'intentando vincular:', dto.mac_address);
+    
+    try {
+      return await this.deviceService.vincularDispositivoAUsuario(userId, dto);
+    } catch (error) {
+      console.error('[vincularDispositivo] Error:', error.message);
+      throw error;
+    }
   }
 
   @UseGuards(JwtAuthGuard)

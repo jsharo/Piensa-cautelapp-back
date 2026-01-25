@@ -21,6 +21,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@Req() req: any) {
+    console.log('[auth/me] Usuario autenticado con ID:', req.user.id_usuario);
     return this.auth.me(req.user.id_usuario);
   }
 

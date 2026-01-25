@@ -64,7 +64,18 @@ export class AuthService {
   }
 
   async me(userId: number) {
-    const user = await this.prisma.usuario.findUnique({ where: { id_usuario: userId }, include: { rol: true } });
+    console.log('[AuthService.me] Buscando usuario con ID:', userId);
+    const user = await this.prisma.usuario.findUnique({ 
+      where: { id_usuario: userId }, 
+      include: { rol: true } 
+    });
+    
+    if (!user) {
+      console.error('[AuthService.me] ERROR: Usuario no encontrado con ID:', userId);
+      throw new UnauthorizedException('Usuario no encontrado. Token inválido o usuario eliminado.');
+    }
+    
+    console.log('[AuthService.me] Usuario encontrado:', user.email);
     return this.sanitize(user!);
   }
 
