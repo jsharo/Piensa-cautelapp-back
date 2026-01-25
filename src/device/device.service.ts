@@ -884,48 +884,89 @@ export class DeviceService {
     console.log(`[MPU-ALERT] Procesando alerta de desmayo para dispositivo ID ${dispositivoId}`);
 
     try {
+      // Buscar el dispositivo para obtener su device_id
+      const dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { id_dispositivo: dispositivoId },
+      });
+
+      if (!dispositivo) {
+        console.error(`[MPU-ALERT] ✗ Dispositivo ${dispositivoId} no encontrado`);
+        return;
+      }
+
+      console.log(`[MPU-ALERT] Dispositivo encontrado: ${dispositivo.device_id}`);
+
       // Buscar el adulto mayor asociado a este dispositivo
       const adultoMayor = await this.prisma.adultoMayor.findFirst({
         where: { id_dispositivo: dispositivoId },
-        include: { usuariosAdultoMayor: { select: { id_usuario: true } } },
+        include: { 
+          usuariosAdultoMayor: { 
+            select: { id_usuario: true },
+            include: { usuario: { select: { nombre: true, email: true } } }
+          } 
+        },
       });
 
       if (!adultoMayor) {
         console.warn(
-          `[MPU-ALERT] ⚠ No se encontró adulto mayor para el dispositivo ${dispositivoId}`
+          `[MPU-ALERT] ⚠ No se encontró adulto mayor vinculado al dispositivo ${dispositivo.device_id} (ID: ${dispositivoId})`
         );
+        console.warn(`[MPU-ALERT] ⚠ El dispositivo debe vincularse a un adulto mayor desde la app`);
+        
+        // Si hay userId en la alerta, enviar notificación directa al usuario
+        if (alertData.userId) {
+          const userId = parseInt(alertData.userId);
+          console.log(`[MPU-ALERT] Enviando alerta directa al usuario ${userId}`);
+          
+          this.deviceEventsService.emitNotification({
+            id_notificacion: 0, // Notificación temporal sin ID de BD
+            userId: userId,
+            tipo: 'DESMAYO',
+            usuario: `Dispositivo ${dispositivo.device_id}`,
+            mensaje: `⚠️ ${alertData.alert_type} - Dispositivo sin vincular - Aceleración: ${alertData.mpu_acceleration.toFixed(2)} g`,
+            fecha_hora: new Date().toISOString(),
+          });
+          console.log(`[MPU-ALERT] 🔔 Alerta directa enviada al usuario ${userId} (dispositivo sin vincular)`);
+        }
         return;
       }
 
-      // Crear notificación de desmayo
+      console.log(`[MPU-ALERT] Adulto mayor encontrado: ${adultoMayor.nombre} (ID: ${adultoMayor.id_adulto})`);
+      console.log(`[MPU-ALERT] Usuarios monitoreando: ${adultoMayor.usuariosAdultoMayor.length}`);
+
+      // Crear notificación de desmayo en la base de datos
       const notificacion = await this.prisma.notificaciones.create({
         data: {
           id_adulto: adultoMayor.id_adulto,
           tipo: 'DESMAYO',
           fecha_hora: new Date(),
-          mensaje: `⚠️ ${alertData.alert_type} - Aceleración: ${alertData.mpu_acceleration.toFixed(2)} g - ${alertData.mpu_status}`,
+          mensaje: `⚠️ EMERGENCIA: ${alertData.alert_type} - ${adultoMayor.nombre} - Aceleración: ${alertData.mpu_acceleration.toFixed(2)} g`,
         },
       });
 
       console.log(
-        `[MPU-ALERT] ✓ Notificación de desmayo creada para ${adultoMayor.nombre}:`,
-        notificacion
+        `[MPU-ALERT] ✓ Notificación de desmayo creada (ID: ${notificacion.id_notificacion}) para ${adultoMayor.nombre}`
       );
 
       // Emitir evento SSE urgente a todos los usuarios que monitorean a este adulto
+      if (adultoMayor.usuariosAdultoMayor.length === 0) {
+        console.warn(`[MPU-ALERT] ⚠ No hay usuarios monitoreando a ${adultoMayor.nombre}`);
+      }
+
       for (const relacion of adultoMayor.usuariosAdultoMayor) {
         this.deviceEventsService.emitNotification({
           id_notificacion: notificacion.id_notificacion,
           userId: relacion.id_usuario,
           tipo: 'DESMAYO',
           usuario: adultoMayor.nombre,
-          mensaje: notificacion.mensaje || `⚠️ Desmayo confirmado`,
+          mensaje: notificacion.mensaje || `⚠️ EMERGENCIA: Desmayo confirmado`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
         });
-        console.log(`[MPU-ALERT] 🔔 Notificación enviada al usuario ${relacion.id_usuario}`);
+        console.log(`[MPU-ALERT] 🔔 Notificación de EMERGENCIA enviada al usuario ${relacion.id_usuario} (${relacion.usuario.nombre})`);
       }
     } catch (error) {
       console.error('[MPU-ALERT] ✗ Error al crear notificación de desmayo:', error);
+      console.error('[MPU-ALERT] Stack:', error.stack);
     }
   }
 }
