@@ -232,7 +232,16 @@ export class DeviceService {
       },
     });
 
-    console.log('[vincularDispositivoAUsuario] Búsqueda de dispositivo:', dispositivo ? `Encontrado ID ${dispositivo.id_dispositivo}` : 'No encontrado');
+    if (dispositivo) {
+      console.log('[vincularDispositivoAUsuario] ✓ Dispositivo encontrado:', {
+        id: dispositivo.id_dispositivo,
+        mac_address: dispositivo.mac_address,
+        device_id: dispositivo.device_id,
+        bateria: dispositivo.bateria
+      });
+    } else {
+      console.log('[vincularDispositivoAUsuario] Dispositivo no encontrado, se creará uno nuevo');
+    }
 
     // 2. Si no existe, crear el dispositivo
     if (!dispositivo) {
@@ -242,18 +251,28 @@ export class DeviceService {
           mac_address: dto.mac_address,
           device_id: dto.mac_address, // Asignar también como device_id
           bateria: dto.bateria,
+          online_status: true, // Marcarlo como online al vincular
+          last_seen: new Date(),
         },
       });
-      console.log('[vincularDispositivoAUsuario] Dispositivo creado con ID:', dispositivo.id_dispositivo);
+      console.log('[vincularDispositivoAUsuario] ✓ Dispositivo creado con ID:', dispositivo.id_dispositivo);
     } else {
-      console.log('[vincularDispositivoAUsuario] Dispositivo ya existe, actualizando...');
-      // Si existe, actualizar la batería y asegurar que tiene device_id
+      console.log('[vincularDispositivoAUsuario] Actualizando dispositivo existente...');
+      // Si existe, actualizar la batería y asegurar que tiene AMBOS campos
       dispositivo = await this.prisma.dispositivo.update({
         where: { id_dispositivo: dispositivo.id_dispositivo },
         data: { 
           bateria: dto.bateria,
+          mac_address: dispositivo.mac_address || dto.mac_address, // Asegurar que tiene mac_address
           device_id: dispositivo.device_id || dto.mac_address, // Asegurar que tiene device_id
+          online_status: true,
+          last_seen: new Date(),
         },
+      });
+      console.log('[vincularDispositivoAUsuario] ✓ Dispositivo actualizado:', {
+        id: dispositivo.id_dispositivo,
+        mac_address: dispositivo.mac_address,
+        device_id: dispositivo.device_id
       });
     }
 
@@ -262,12 +281,26 @@ export class DeviceService {
       where: { id_dispositivo: dispositivo.id_dispositivo },
     });
 
+    console.log('[vincularDispositivoAUsuario] Adulto existente para dispositivo:', adultoExistente ? `ID ${adultoExistente.id_adulto} - ${adultoExistente.nombre}` : 'No encontrado');
+
     let adultoMayor;
     if (adultoExistente) {
-      // Usar el adulto mayor existente
-      adultoMayor = adultoExistente;
+      // ACTUALIZAR el adulto mayor existente con los nuevos datos del modal
+      console.log('[vincularDispositivoAUsuario] Actualizando adulto mayor existente con datos del modal...');
+      adultoMayor = await this.prisma.adultoMayor.update({
+        where: { id_adulto: adultoExistente.id_adulto },
+        data: {
+          nombre: dto.nombre_adulto || adultoExistente.nombre,
+          fecha_nacimiento: dto.fecha_nacimiento 
+            ? new Date(dto.fecha_nacimiento) 
+            : adultoExistente.fecha_nacimiento,
+          direccion: dto.direccion || adultoExistente.direccion,
+        },
+      });
+      console.log('[vincularDispositivoAUsuario] ✓ Adulto mayor actualizado:', adultoMayor.nombre);
     } else {
       // 4. Crear un adulto mayor asociado al dispositivo
+      console.log('[vincularDispositivoAUsuario] Creando nuevo adulto mayor...');
       adultoMayor = await this.prisma.adultoMayor.create({
         data: {
           nombre: dto.nombre_adulto || `Dispositivo ${dto.mac_address}`,
@@ -278,6 +311,7 @@ export class DeviceService {
           id_dispositivo: dispositivo.id_dispositivo,
         },
       });
+      console.log('[vincularDispositivoAUsuario] ✓ Adulto mayor creado con ID:', adultoMayor.id_adulto);
     }
 
     // 5. Verificar si ya existe la relación Usuario-AdultoMayor
@@ -293,6 +327,15 @@ export class DeviceService {
     });
 
     // 6. Si no existe la relación, crearla
+    console.log('[vincularDispositivoAUsuario] ✅ VINCULACIÓN EXITOSA:', {
+      dispositivo_id: dispositivo.id_dispositivo,
+      device_id: dispositivo.device_id,
+      adulto_id: adultoMayor.id_adulto,
+      adulto_nombre: adultoMayor.nombre,
+      usuario_id: userId,
+      relacion_creada: !relacionExistente
+    });
+
     if (!relacionExistente) {
       console.log('[vincularDispositivoAUsuario] Creando relación Usuario-AdultoMayor');
       try {
@@ -908,9 +951,10 @@ export class DeviceService {
         return;
       }
 
-      console.log(`[MPU-ALERT] Dispositivo encontrado: ${dispositivo.device_id}`);
+      console.log(`[MPU-ALERT] Dispositivo encontrado: ${dispositivo.device_id} (ID: ${dispositivoId})`);
 
       // Buscar el adulto mayor asociado a este dispositivo
+      console.log(`[MPU-ALERT] Buscando adulto mayor con id_dispositivo = ${dispositivoId}...`);
       const adultoMayor = await this.prisma.adultoMayor.findFirst({
         where: { id_dispositivo: dispositivoId },
         include: { 
@@ -926,9 +970,10 @@ export class DeviceService {
 
       if (!adultoMayor) {
         console.warn(
-          `[MPU-ALERT] ⚠ No se encontró adulto mayor vinculado al dispositivo ${dispositivo.device_id} (ID: ${dispositivoId})`
+          `[MPU-ALERT] ⚠️ NO SE ENCONTRÓ ADULTO MAYOR para dispositivo ${dispositivo.device_id} (ID: ${dispositivoId})`
         );
-        console.warn(`[MPU-ALERT] ⚠ El dispositivo debe vincularse a un adulto mayor desde la app`);
+        console.warn(`[MPU-ALERT] ⚠️ Debes vincular el dispositivo desde la app con el botón "Guardar" del modal`);
+        console.warn(`[MPU-ALERT] ⚠️ Esto creará la relación: Dispositivo → AdultoMayor → Usuario`);
         
         // Si hay userId en la alerta, enviar notificación directa al usuario
         if (alertData.userId) {
@@ -948,8 +993,12 @@ export class DeviceService {
         return;
       }
 
-      console.log(`[MPU-ALERT] Adulto mayor encontrado: ${adultoMayor.nombre} (ID: ${adultoMayor.id_adulto})`);
-      console.log(`[MPU-ALERT] Usuarios monitoreando: ${adultoMayor.usuariosAdultoMayor.length}`);
+      console.log(`[MPU-ALERT] ✅ Adulto mayor encontrado:`, {
+        id_adulto: adultoMayor.id_adulto,
+        nombre: adultoMayor.nombre,
+        id_dispositivo: adultoMayor.id_dispositivo,
+        usuarios_monitoreando: adultoMayor.usuariosAdultoMayor.length
+      });
 
       // Crear notificación de desmayo en la base de datos
       const notificacion = await this.prisma.notificaciones.create({
