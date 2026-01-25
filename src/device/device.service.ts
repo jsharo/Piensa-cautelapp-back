@@ -901,8 +901,11 @@ export class DeviceService {
         where: { id_dispositivo: dispositivoId },
         include: { 
           usuariosAdultoMayor: { 
-            select: { id_usuario: true },
-            include: { usuario: { select: { nombre: true, email: true } } }
+            include: { 
+              usuario: { 
+                select: { id_usuario: true, nombre: true, email: true } 
+              } 
+            } 
           } 
         },
       });
@@ -956,13 +959,13 @@ export class DeviceService {
       for (const relacion of adultoMayor.usuariosAdultoMayor) {
         this.deviceEventsService.emitNotification({
           id_notificacion: notificacion.id_notificacion,
-          userId: relacion.id_usuario,
+          userId: relacion.usuario.id_usuario,
           tipo: 'DESMAYO',
           usuario: adultoMayor.nombre,
           mensaje: notificacion.mensaje || `⚠️ EMERGENCIA: Desmayo confirmado`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
         });
-        console.log(`[MPU-ALERT] 🔔 Notificación de EMERGENCIA enviada al usuario ${relacion.id_usuario} (${relacion.usuario.nombre})`);
+        console.log(`[MPU-ALERT] 🔔 Notificación de EMERGENCIA enviada al usuario ${relacion.usuario.id_usuario} (${relacion.usuario.nombre})`);
       }
     } catch (error) {
       console.error('[MPU-ALERT] ✗ Error al crear notificación de desmayo:', error);
