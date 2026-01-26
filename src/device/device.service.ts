@@ -879,15 +879,30 @@ export class DeviceService {
         `[ESP32-MAX] ✓ Datos guardados. ID: ${sensorData.id_sensor}, BPM: ${dto.max_bpm}, Avg: ${dto.max_avg_bpm}`
       );
 
-      // 3. Emitir evento SSE si hay userId
-      if (dto.userId) {
-        this.deviceEventsService.emitSensorData({
-          deviceId: dto.deviceId,
-          userId: parseInt(dto.userId),
-          mpu_fall_detected: false,
-          max_bpm: dto.max_bpm,
-          battery: dto.battery,
-        });
+      // 3. Buscar adulto mayor asociado y emitir BPM promedio via SSE
+      const adultoMayor = await this.prisma.adultoMayor.findFirst({
+        where: { id_dispositivo: dispositivo.id_dispositivo },
+        include: { 
+          usuariosAdultoMayor: { 
+            select: { id_usuario: true } 
+          } 
+        },
+      });
+
+      if (adultoMayor && adultoMayor.usuariosAdultoMayor.length > 0) {
+        // Emitir BPM promedio a todos los usuarios que monitorean este adulto
+        for (const relacion of adultoMayor.usuariosAdultoMayor) {
+          this.deviceEventsService.emitNotification({
+            id_notificacion: 0, // No es una notificación de BD, solo datos en tiempo real
+            userId: relacion.id_usuario,
+            tipo: 'BPM_UPDATE',
+            usuario: adultoMayor.nombre,
+            mensaje: null,
+            fecha_hora: new Date().toISOString(),
+            pulso: dto.max_avg_bpm, // ⭐ Solo enviar BPM promedio
+          });
+          console.log(`[ESP32-MAX] 📊 BPM promedio ${dto.max_avg_bpm} enviado al usuario ${relacion.id_usuario}`);
+        }
       }
 
       return {
@@ -1060,9 +1075,9 @@ export class DeviceService {
       const notificacion = await this.prisma.notificaciones.create({
         data: {
           id_adulto: adultoMayor.id_adulto,
-          tipo: 'DESMAYO',
+          tipo: 'EMERGENCIA',
           fecha_hora: new Date(),
-          mensaje: `⚠️ EMERGENCIA: ${alertData.alert_type} - ${adultoMayor.nombre} - Aceleración: ${alertData.mpu_acceleration.toFixed(2)} g`,
+          mensaje: `${adultoMayor.nombre} necesita tu ayuda rápido`,
         },
       });
 
@@ -1079,9 +1094,9 @@ export class DeviceService {
         this.deviceEventsService.emitNotification({
           id_notificacion: notificacion.id_notificacion,
           userId: relacion.usuario.id_usuario,
-          tipo: 'DESMAYO',
+          tipo: 'EMERGENCIA',
           usuario: adultoMayor.nombre,
-          mensaje: notificacion.mensaje || `⚠️ EMERGENCIA: Desmayo confirmado`,
+          mensaje: notificacion.mensaje || `${adultoMayor.nombre} necesita tu ayuda rápido`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
         });
         console.log(`[MPU-ALERT] 🔔 Notificación de EMERGENCIA enviada al usuario ${relacion.usuario.id_usuario} (${relacion.usuario.nombre})`);
