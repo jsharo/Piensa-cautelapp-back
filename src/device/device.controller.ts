@@ -147,6 +147,17 @@ export class DeviceController {
   }
 
   /**
+   * Endpoint para recibir alertas de botón de pánico del ESP32
+   * El ESP32 envía esta alerta cuando el usuario presiona el botón de emergencia
+   * No requiere autenticación ya que es llamado por el dispositivo
+   */
+  @Post('esp32/sensor-data/button-alert')
+  handleEsp32ButtonAlert(@Body() dto: any) {
+    console.log('[CONTROLLER] ⚠️ Alerta de botón de pánico recibida');
+    return this.deviceService.handleEsp32ButtonAlert(dto);
+  }
+
+  /**
    * SSE endpoint para que el frontend escuche eventos de conexión de dispositivos
    * Requiere autenticación y solo envía eventos del usuario autenticado
    * El token JWT se pasa como query parameter: ?token=xxx

@@ -1140,4 +1140,182 @@ export class DeviceService {
       console.error('[MPU-ALERT] Stack:', error.stack);
     }
   }
+
+  /**
+   * ⭐ NUEVO: Procesa y almacena alertas del botón de pánico
+   * Crea una notificación y emite eventos SSE
+   */
+  async handleEsp32ButtonAlert(dto: any) {
+    console.log('[ESP32-BUTTON] ⚠️⚠️⚠️ ALERTA DE BOTÓN DE PÁNICO RECIBIDA ⚠️⚠️⚠️');
+    console.log('[ESP32-BUTTON] Datos:', {
+      deviceId: dto.deviceId,
+      alertType: dto.alert_type,
+      buttonPressed: dto.button_pressed,
+      message: dto.message,
+    });
+
+    try {
+      // 1. Buscar o crear el dispositivo
+      let dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { device_id: dto.deviceId },
+      });
+
+      if (!dispositivo) {
+        console.log(`[ESP32-BUTTON] Dispositivo ${dto.deviceId} no encontrado, creando...`);
+        dispositivo = await this.prisma.dispositivo.create({
+          data: {
+            device_id: dto.deviceId,
+            bateria: dto.battery ?? 100,
+            online_status: true,
+            last_seen: new Date(),
+          },
+        });
+      } else {
+        // Actualizar estado
+        dispositivo = await this.prisma.dispositivo.update({
+          where: { id_dispositivo: dispositivo.id_dispositivo },
+          data: {
+            online_status: true,
+            last_seen: new Date(),
+            bateria: dto.battery,
+          },
+        });
+      }
+
+      // 2. Guardar alerta en SensorData
+      const sensorData = await this.prisma.sensorData.create({
+        data: {
+          id_dispositivo: dispositivo.id_dispositivo,
+          // Información general
+          battery: dto.battery,
+          wifi_ssid: dto.wifi_ssid,
+          wifi_rssi: dto.wifi_rssi,
+          // Clasificación
+          sensor_type: dto.sensor_type, // "BUTTON"
+          alert_type: dto.alert_type, // "BOTON_PANICO"
+          is_alert: true, // ⚠️ ESTO ES UNA ALERTA URGENTE
+          // Timestamps
+          timestamp: new Date(dto.timestamp),
+          received_at: new Date(),
+        },
+      });
+
+      console.log(`[ESP32-BUTTON] ✓ Alerta guardada. ID: ${sensorData.id_sensor}`);
+
+      // 3. Crear notificación y emitir evento SSE
+      await this.handleButtonPanicAlert(dispositivo.id_dispositivo, dto);
+
+      return {
+        success: true,
+        message: '⚠️ Alerta de botón de pánico procesada',
+        deviceId: dto.deviceId,
+        sensorDataId: sensorData.id_sensor,
+        alertType: dto.alert_type,
+      };
+    } catch (error) {
+      console.error('[ESP32-BUTTON] ✗ Error al procesar alerta de botón:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ⭐ NUEVO: Maneja la creación de notificaciones para alertas de botón de pánico
+   */
+  private async handleButtonPanicAlert(
+    dispositivoId: number,
+    alertData: any
+  ) {
+    console.log(`[BUTTON-ALERT] Procesando alerta de botón para dispositivo ID ${dispositivoId}`);
+
+    try {
+      // Buscar el dispositivo
+      const dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { id_dispositivo: dispositivoId },
+      });
+
+      if (!dispositivo) {
+        console.error(`[BUTTON-ALERT] ✗ Dispositivo ${dispositivoId} no encontrado`);
+        return;
+      }
+
+      console.log(`[BUTTON-ALERT] Dispositivo encontrado: ${dispositivo.device_id} (ID: ${dispositivoId})`);
+
+      // Buscar el adulto mayor asociado
+      const adultoMayor = await this.prisma.adultoMayor.findFirst({
+        where: { id_dispositivo: dispositivoId },
+        include: { 
+          usuariosAdultoMayor: { 
+            include: { 
+              usuario: { 
+                select: { id_usuario: true, nombre: true, email: true } 
+              } 
+            } 
+          } 
+        },
+      });
+
+      if (!adultoMayor) {
+        console.warn(
+          `[BUTTON-ALERT] ⚠️ NO SE ENCONTRÓ ADULTO MAYOR para dispositivo ${dispositivo.device_id}`
+        );
+        
+        // Si hay userId, enviar notificación directa
+        if (alertData.userId) {
+          const userId = parseInt(alertData.userId);
+          console.log(`[BUTTON-ALERT] Enviando alerta directa al usuario ${userId}`);
+          
+          this.deviceEventsService.emitNotification({
+            id_notificacion: 0,
+            userId: userId,
+            tipo: 'PANICO',
+            usuario: `Dispositivo ${dispositivo.device_id}`,
+            mensaje: `⚠️ Botón de pánico presionado - Dispositivo sin vincular`,
+            fecha_hora: new Date().toISOString(),
+          });
+          console.log(`[BUTTON-ALERT] 🔔 Alerta directa enviada al usuario ${userId}`);
+        }
+        return;
+      }
+
+      console.log(`[BUTTON-ALERT] ✅ Adulto mayor encontrado:`, {
+        id_adulto: adultoMayor.id_adulto,
+        nombre: adultoMayor.nombre,
+        usuarios_monitoreando: adultoMayor.usuariosAdultoMayor.length
+      });
+
+      // Crear notificación en la base de datos
+      const notificacion = await this.prisma.notificaciones.create({
+        data: {
+          id_adulto: adultoMayor.id_adulto,
+          tipo: 'PANICO',
+          fecha_hora: new Date(),
+          mensaje: `${adultoMayor.nombre} presionó el botón de emergencia`,
+        },
+      });
+
+      console.log(
+        `[BUTTON-ALERT] ✓ Notificación creada (ID: ${notificacion.id_notificacion}) para ${adultoMayor.nombre}`
+      );
+
+      // Emitir evento SSE a todos los usuarios que monitorean
+      if (adultoMayor.usuariosAdultoMayor.length === 0) {
+        console.warn(`[BUTTON-ALERT] ⚠ No hay usuarios monitoreando a ${adultoMayor.nombre}`);
+      }
+
+      for (const relacion of adultoMayor.usuariosAdultoMayor) {
+        this.deviceEventsService.emitNotification({
+          id_notificacion: notificacion.id_notificacion,
+          userId: relacion.usuario.id_usuario,
+          tipo: 'PANICO',
+          usuario: adultoMayor.nombre,
+          mensaje: notificacion.mensaje || `${adultoMayor.nombre} presionó el botón de emergencia`,
+          fecha_hora: notificacion.fecha_hora.toISOString(),
+        });
+        console.log(`[BUTTON-ALERT] 🔔 Notificación de PÁNICO enviada al usuario ${relacion.usuario.id_usuario} (${relacion.usuario.nombre})`);
+      }
+    } catch (error) {
+      console.error('[BUTTON-ALERT] ✗ Error al crear notificación de botón:', error);
+      console.error('[BUTTON-ALERT] Stack:', error.stack);
+    }
+  }
 }
