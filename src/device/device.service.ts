@@ -301,6 +301,13 @@ export class DeviceService {
     } else {
       // 4. Crear un adulto mayor asociado al dispositivo
       console.log('[vincularDispositivoAUsuario] Creando nuevo adulto mayor...');
+      console.log('[vincularDispositivoAUsuario] 📋 Datos del adulto a crear:', {
+        nombre: dto.nombre_adulto || `Dispositivo ${dto.mac_address}`,
+        fecha_nacimiento: dto.fecha_nacimiento,
+        direccion: dto.direccion || 'Ubicación no especificada',
+        id_dispositivo: dispositivo.id_dispositivo // ← VINCULACIÓN CRÍTICA
+      });
+      
       adultoMayor = await this.prisma.adultoMayor.create({
         data: {
           nombre: dto.nombre_adulto || `Dispositivo ${dto.mac_address}`,
@@ -308,10 +315,15 @@ export class DeviceService {
             ? new Date(dto.fecha_nacimiento) 
             : new Date('1950-01-01'),
           direccion: dto.direccion || 'Ubicación no especificada',
-          id_dispositivo: dispositivo.id_dispositivo,
+          id_dispositivo: dispositivo.id_dispositivo, // ← VINCULA AL DISPOSITIVO CORRECTO
         },
       });
-      console.log('[vincularDispositivoAUsuario] ✓ Adulto mayor creado con ID:', adultoMayor.id_adulto);
+      
+      console.log('[vincularDispositivoAUsuario] ✅ Adulto mayor creado:', {
+        id_adulto: adultoMayor.id_adulto,
+        nombre: adultoMayor.nombre,
+        id_dispositivo: adultoMayor.id_dispositivo // ← Confirmar FK correcta
+      });
     }
 
     // 5. Verificar si ya existe la relación Usuario-AdultoMayor
@@ -330,11 +342,21 @@ export class DeviceService {
     console.log('[vincularDispositivoAUsuario] ✅ VINCULACIÓN EXITOSA:', {
       dispositivo_id: dispositivo.id_dispositivo,
       device_id: dispositivo.device_id,
+      mac_address: dispositivo.mac_address,
       adulto_id: adultoMayor.id_adulto,
       adulto_nombre: adultoMayor.nombre,
+      adulto_id_dispositivo: adultoMayor.id_dispositivo, // ← Confirmar FK
       usuario_id: userId,
       relacion_creada: !relacionExistente
     });
+    
+    // VERIFICACIÓN ADICIONAL: Confirmar que la relación está correcta
+    if (adultoMayor.id_dispositivo !== dispositivo.id_dispositivo) {
+      console.error('[vincularDispositivoAUsuario] ⚠️ ERROR DE VINCULACIÓN: AdultoMayor NO está vinculado al dispositivo correcto!');
+      console.error('[vincularDispositivoAUsuario] Esperado:', dispositivo.id_dispositivo, 'Actual:', adultoMayor.id_dispositivo);
+    } else {
+      console.log('[vincularDispositivoAUsuario] ✅ VERIFICACIÓN: AdultoMayor correctamente vinculado al Dispositivo', dispositivo.id_dispositivo);
+    }
 
     if (!relacionExistente) {
       console.log('[vincularDispositivoAUsuario] Creando relación Usuario-AdultoMayor');
