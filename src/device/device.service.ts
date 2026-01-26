@@ -530,13 +530,14 @@ export class DeviceService {
 
   /**
    * Consulta si un dispositivo (por nombre) está conectado
-   * No consulta la BD, solo la memoria temporal
+   * Verifica primero la memoria temporal, luego la BD
    */
   async checkDeviceConnectionStatus(deviceName: string) {
+    // 1. Verificar en memoria temporal (más rápido)
     const deviceInfo = this.connectedDevices.get(deviceName);
 
     if (deviceInfo) {
-      console.log(`[ESP32] Dispositivo ${deviceName} encontrado: conectado`);
+      console.log(`[ESP32] Dispositivo ${deviceName} encontrado en memoria: conectado`);
       return {
         connected: true,
         deviceId: deviceInfo.deviceId,
@@ -544,10 +545,38 @@ export class DeviceService {
         ip: deviceInfo.ip,
         rssi: deviceInfo.rssi,
         userId: deviceInfo.userId,
+        source: 'memory'
       };
     }
 
-    console.log(`[ESP32] Dispositivo ${deviceName} no encontrado en memoria`);
+    // 2. Verificar en BD (si no está en memoria)
+    console.log(`[ESP32] Dispositivo ${deviceName} no encontrado en memoria, consultando BD...`);
+    try {
+      const dispositivo = await this.prisma.dispositivo.findFirst({
+        where: {
+          OR: [
+            { device_id: deviceName },
+            { mac_address: deviceName },
+          ]
+        }
+      });
+
+      if (dispositivo) {
+        console.log(`[ESP32] Dispositivo ${deviceName} encontrado en BD (ID: ${dispositivo.id_dispositivo})`);
+        return {
+          connected: true,
+          deviceId: dispositivo.device_id || dispositivo.mac_address,
+          dbId: dispositivo.id_dispositivo,
+          online_status: dispositivo.online_status,
+          last_seen: dispositivo.last_seen,
+          source: 'database'
+        };
+      }
+    } catch (error) {
+      console.error(`[ESP32] Error consultando BD para ${deviceName}:`, error);
+    }
+
+    console.log(`[ESP32] Dispositivo ${deviceName} no encontrado en memoria ni BD`);
     return {
       connected: false,
       message: 'Dispositivo no conectado aún',
