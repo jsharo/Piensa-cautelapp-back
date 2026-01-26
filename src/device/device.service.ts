@@ -209,6 +209,11 @@ export class DeviceService {
 
   async vincularDispositivoAUsuario(userId: number, dto: VincularDispositivoDto) {
     console.log('[vincularDispositivoAUsuario] Iniciando con userId:', userId, 'y dto:', JSON.stringify(dto, null, 2));
+    console.log('[vincularDispositivoAUsuario] 🔍 VERIFICANDO DATOS RECIBIDOS:');
+    console.log('[vincularDispositivoAUsuario]   - nombre_adulto:', dto.nombre_adulto, '(tipo:', typeof dto.nombre_adulto, ')');
+    console.log('[vincularDispositivoAUsuario]   - fecha_nacimiento:', dto.fecha_nacimiento);
+    console.log('[vincularDispositivoAUsuario]   - direccion:', dto.direccion);
+    console.log('[vincularDispositivoAUsuario]   - mac_address:', dto.mac_address);
     
     // 0. Verificar que el usuario existe
     const usuario = await this.prisma.usuario.findUnique({
