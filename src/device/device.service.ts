@@ -897,7 +897,7 @@ export class DeviceService {
             userId: relacion.id_usuario,
             tipo: 'BPM_UPDATE',
             usuario: adultoMayor.nombre,
-            mensaje: null,
+            mensaje: undefined,
             fecha_hora: new Date().toISOString(),
             pulso: dto.max_avg_bpm, // ⭐ Solo enviar BPM promedio
           });
