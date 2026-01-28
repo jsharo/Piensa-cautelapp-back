@@ -227,7 +227,7 @@ export class DeviceService {
 
     console.log('[vincularDispositivoAUsuario] Usuario encontrado:', usuario.email);
 
-    // 1. Verificar si el dispositivo ya existe (buscar por mac_address o device_id)
+    // 1. Buscar si el dispositivo ya existe en BD
     let dispositivo = await this.prisma.dispositivo.findFirst({
       where: {
         OR: [
@@ -237,41 +237,42 @@ export class DeviceService {
       },
     });
 
-    if (!dispositivo) {
-      // ⚠️ ERROR: El dispositivo DEBE existir (creado al conectar WiFi)
-      console.error('[vincularDispositivoAUsuario] ❌ ERROR: Dispositivo no encontrado en BD');
-      console.error('[vincularDispositivoAUsuario] Buscando:', dto.mac_address);
-      console.error('[vincularDispositivoAUsuario] El dispositivo debe conectarse a WiFi ANTES de vincular');
-      throw new Error(
-        `Dispositivo "${dto.mac_address}" no encontrado. ` +
-        `Asegúrate de que el ESP32 se haya conectado a WiFi correctamente antes de vincular.`
-      );
+    if (dispositivo) {
+      // ✓ Dispositivo ya existe (probablemente ya fue vinculado antes)
+      console.log('[vincularDispositivoAUsuario] ✓ Dispositivo ya existe en BD:', {
+        id: dispositivo.id_dispositivo,
+        mac_address: dispositivo.mac_address,
+        device_id: dispositivo.device_id,
+        bateria: dispositivo.bateria
+      });
+      
+      // Actualizar estado y batería del dispositivo existente
+      console.log('[vincularDispositivoAUsuario] Actualizando dispositivo existente...');
+      dispositivo = await this.prisma.dispositivo.update({
+        where: { id_dispositivo: dispositivo.id_dispositivo },
+        data: { 
+          bateria: dto.bateria,
+          online_status: true,
+          last_seen: new Date(),
+        },
+      });
+      console.log('[vincularDispositivoAUsuario] ✓ Dispositivo actualizado');
+    } else {
+      // ⭐ NUEVO: Crear el dispositivo EN ESTE MOMENTO (después de recibir datos del adulto mayor)
+      console.log('[vincularDispositivoAUsuario] ⭐ Dispositivo NO existe en BD. Creándolo ahora con datos del adulto mayor...');
+      dispositivo = await this.prisma.dispositivo.create({
+        data: {
+          device_id: dto.mac_address,
+          mac_address: dto.mac_address,
+          bateria: dto.bateria || 100,
+          online_status: true,
+          last_seen: new Date(),
+        },
+      });
+      console.log('[vincularDispositivoAUsuario] ✅ Dispositivo creado en BD (ID:', dispositivo.id_dispositivo, ')');
     }
 
-    console.log('[vincularDispositivoAUsuario] ✓ Dispositivo encontrado:', {
-      id: dispositivo.id_dispositivo,
-      mac_address: dispositivo.mac_address,
-      device_id: dispositivo.device_id,
-      bateria: dispositivo.bateria
-    });
-
-    // 2. Actualizar el dispositivo existente
-    console.log('[vincularDispositivoAUsuario] Actualizando dispositivo existente...');
-    dispositivo = await this.prisma.dispositivo.update({
-      where: { id_dispositivo: dispositivo.id_dispositivo },
-      data: { 
-        bateria: dto.bateria,
-        online_status: true,
-        last_seen: new Date(),
-      },
-    });
-    console.log('[vincularDispositivoAUsuario] ✓ Dispositivo actualizado:', {
-      id: dispositivo.id_dispositivo,
-      mac_address: dispositivo.mac_address,
-      device_id: dispositivo.device_id
-    });
-
-    // 3. Verificar si ya existe un adulto mayor con este dispositivo
+    // 2. Verificar si ya existe un adulto mayor con este dispositivo
     const adultoExistente = await this.prisma.adultoMayor.findFirst({
       where: { id_dispositivo: dispositivo.id_dispositivo },
     });
@@ -294,7 +295,7 @@ export class DeviceService {
       });
       console.log('[vincularDispositivoAUsuario] ✓ Adulto mayor actualizado:', adultoMayor.nombre);
     } else {
-      // 4. Crear un adulto mayor asociado al dispositivo
+      // 3. Crear un adulto mayor asociado al dispositivo
       console.log('[vincularDispositivoAUsuario] Creando nuevo adulto mayor...');
       console.log('[vincularDispositivoAUsuario] 📋 Datos del adulto a crear:', {
         nombre: dto.nombre_adulto || `Dispositivo ${dto.mac_address}`,
@@ -445,14 +446,16 @@ export class DeviceService {
 
   /**
    * Maneja la notificación de conexión WiFi del ESP32
-   * Guarda el estado en memoria Y en la base de datos
+   * SOLO guarda el estado en memoria (NO crea el dispositivo en BD)
+   * El dispositivo se creará en BD cuando se vincule con los datos del adulto mayor
    */
   async handleEsp32Connection(dto: Esp32ConnectionDto) {
     console.log('[ESP32-CONN] Notificación de conexión recibida:', dto);
 
     try {
-      // 1. GUARDAR/ACTUALIZAR EN BASE DE DATOS
-      let dispositivo = await this.prisma.dispositivo.findFirst({
+      // 1. VERIFICAR SI EL DISPOSITIVO YA EXISTE EN BD (para actualizar WiFi)
+      let dispositivoDbId: number | undefined;
+      const dispositivoExistente = await this.prisma.dispositivo.findFirst({
         where: {
           OR: [
             { device_id: dto.deviceId },
@@ -461,33 +464,26 @@ export class DeviceService {
         }
       });
 
-      if (!dispositivo) {
-        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} no existe en BD, creando...`);
-        dispositivo = await this.prisma.dispositivo.create({
+      if (dispositivoExistente) {
+        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} ya existe en BD (ID: ${dispositivoExistente.id_dispositivo}), actualizando estado WiFi...`);
+        // Solo actualizar estado de conexión y WiFi, NO crear si no existe
+        await this.prisma.dispositivo.update({
+          where: { id_dispositivo: dispositivoExistente.id_dispositivo },
           data: {
-            device_id: dto.deviceId,
-            mac_address: dto.deviceId,
-            bateria: 100, // Valor por defecto al conectar WiFi
             online_status: true,
             last_seen: new Date(),
+            // Actualizar WiFi si cambió de red
+            mac_address: dispositivoExistente.mac_address || dto.deviceId,
+            device_id: dispositivoExistente.device_id || dto.deviceId,
           },
         });
-        console.log(`[ESP32-CONN] ✓ Dispositivo creado en BD (ID: ${dispositivo.id_dispositivo})`);
+        console.log(`[ESP32-CONN] ✓ Dispositivo existente actualizado en BD`);
+        dispositivoDbId = dispositivoExistente.id_dispositivo;
       } else {
-        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} ya existe en BD (ID: ${dispositivo.id_dispositivo}), actualizando...`);
-        dispositivo = await this.prisma.dispositivo.update({
-          where: { id_dispositivo: dispositivo.id_dispositivo },
-          data: {
-            online_status: true,
-            last_seen: new Date(),
-            mac_address: dispositivo.mac_address || dto.deviceId, // Asegurar que tiene mac_address
-            device_id: dispositivo.device_id || dto.deviceId,     // Asegurar que tiene device_id
-          },
-        });
-        console.log(`[ESP32-CONN] ✓ Dispositivo actualizado en BD`);
+        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} NO existe en BD. Se creará al vincular con adulto mayor.`);
       }
 
-      // 2. GUARDAR EN MEMORIA (para consultas rápidas)
+      // 2. GUARDAR EN MEMORIA (para consultas rápidas antes de vincular)
       this.connectedDevices.set(dto.deviceId, {
         deviceId: dto.deviceId,
         ssid: dto.ssid,
@@ -517,9 +513,12 @@ export class DeviceService {
 
       return {
         success: true,
-        message: 'Conexión registrada en BD y memoria',
+        message: dispositivoExistente 
+          ? 'Conexión WiFi actualizada en BD y registrada en memoria'
+          : 'Conexión WiFi registrada en memoria (dispositivo se creará al vincular)',
         deviceId: dto.deviceId,
-        dispositivoDbId: dispositivo.id_dispositivo,
+        dispositivoDbId: dispositivoDbId,
+        inDatabase: !!dispositivoExistente,
         userId: dto.userId,
       };
     } catch (error) {
