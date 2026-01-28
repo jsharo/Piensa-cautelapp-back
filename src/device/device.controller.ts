@@ -113,6 +113,17 @@ export class DeviceController {
   }
 
   /**
+   * Endpoint para verificar si un dispositivo existe en la BD
+   * Retorna si el dispositivo está vinculado y tiene adulto mayor asociado
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('check-exists/:macAddress')
+  async checkDeviceExists(@Req() req: any, @Param('macAddress') macAddress: string) {
+    const userId = req.user.id_usuario;
+    return this.deviceService.checkDeviceExistsForUser(userId, macAddress);
+  }
+
+  /**
    * Endpoint para recibir datos de sensores del ESP32
    * No requiere autenticación ya que es llamado por el dispositivo
    * Recibe datos de: MPU6050 (aceleración, detección de caídas) y MAX30102 (ritmo cardíaco)

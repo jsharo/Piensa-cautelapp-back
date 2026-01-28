@@ -528,6 +528,80 @@ export class DeviceService {
   }
 
   /**
+   * Verifica si un dispositivo existe en BD y está vinculado a un usuario
+   */
+  async checkDeviceExistsForUser(userId: number, macAddress: string) {
+    console.log(`[checkDeviceExists] Usuario ${userId} verificando dispositivo ${macAddress}`);
+
+    try {
+      // Buscar el dispositivo por mac_address o device_id
+      const dispositivo = await this.prisma.dispositivo.findFirst({
+        where: {
+          OR: [
+            { mac_address: macAddress },
+            { device_id: macAddress },
+          ]
+        },
+        include: {
+          adultos: {
+            include: {
+              usuariosAdultoMayor: {
+                where: {
+                  id_usuario: userId
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!dispositivo) {
+        console.log(`[checkDeviceExists] Dispositivo ${macAddress} NO existe en BD`);
+        return {
+          exists: false,
+          inDatabase: false,
+          vinculado: false,
+          message: 'Dispositivo no encontrado'
+        };
+      }
+
+      // Verificar si tiene adulto mayor vinculado al usuario
+      const tieneAdultoMayorVinculado = dispositivo.adultos.some(
+        adulto => adulto.usuariosAdultoMayor.length > 0
+      );
+
+      console.log(`[checkDeviceExists] Dispositivo ${macAddress}:`, {
+        existe: true,
+        id: dispositivo.id_dispositivo,
+        tieneAdultoMayor: dispositivo.adultos.length > 0,
+        vinculadoAlUsuario: tieneAdultoMayorVinculado
+      });
+
+      return {
+        exists: true,
+        inDatabase: true,
+        vinculado: tieneAdultoMayorVinculado,
+        dispositivoId: dispositivo.id_dispositivo,
+        adultosMayores: dispositivo.adultos.map(a => ({
+          id_adulto: a.id_adulto,
+          nombre: a.nombre
+        })),
+        message: tieneAdultoMayorVinculado 
+          ? 'Dispositivo ya vinculado' 
+          : 'Dispositivo existe pero no está vinculado'
+      };
+    } catch (error) {
+      console.error('[checkDeviceExists] Error:', error);
+      return {
+        exists: false,
+        inDatabase: false,
+        vinculado: false,
+        error: 'Error al verificar dispositivo'
+      };
+    }
+  }
+
+  /**
    * Consulta si un dispositivo (por nombre) está conectado
    * Verifica primero la memoria temporal, luego la BD
    */
