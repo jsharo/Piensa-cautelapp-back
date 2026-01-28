@@ -738,25 +738,29 @@ export class DeviceService {
         notificacion
       );
 
-      // Recopilar todos los usuarios únicos (propietarios + miembros de grupos compartidos)
-      const usersToNotify = new Set<number>();
+      // Separar usuarios owners de miembros de grupo
+      const ownerIds = new Set<number>();
+      const groupMemberIds = new Set<number>();
       
-      // Agregar usuarios directamente vinculados
+      // Agregar usuarios directamente vinculados (OWNERS)
       adultoMayor.usuariosAdultoMayor.forEach(relacion => {
-        usersToNotify.add(relacion.id_usuario);
+        ownerIds.add(relacion.id_usuario);
       });
       
-      // Agregar usuarios de grupos compartidos
+      // Agregar usuarios de grupos compartidos (solo si no son owners)
       adultoMayor.sharedInGroups?.forEach(sharedDevice => {
         sharedDevice.group.members.forEach(member => {
-          usersToNotify.add(member.user_id);
+          if (!ownerIds.has(member.user_id)) {
+            groupMemberIds.add(member.user_id);
+          }
         });
       });
 
-      console.log(`[FALL-DETECTION] 🚨 Enviando alerta a ${usersToNotify.size} usuario(s)`);
+      const totalUsers = ownerIds.size + groupMemberIds.size;
+      console.log(`[FALL-DETECTION] 🚨 Enviando alerta a ${totalUsers} usuario(s) (${ownerIds.size} owners, ${groupMemberIds.size} miembros)`);
 
-      // Emitir evento de notificación a todos los usuarios (propietarios + miembros de grupos)
-      for (const userId of usersToNotify) {
+      // PRIMERO: Enviar a OWNERS
+      for (const userId of ownerIds) {
         this.deviceEventsService.emitNotification({
           id_notificacion: notificacion.id_notificacion,
           userId: userId,
@@ -766,7 +770,21 @@ export class DeviceService {
           fecha_hora: notificacion.fecha_hora.toISOString(),
           pulso: notificacion.pulso || undefined,
         });
-        console.log(`[FALL-DETECTION] Evento emitido al usuario ${userId}`);
+        console.log(`[FALL-DETECTION] [OWNER] Evento enviado al usuario ${userId}`);
+      }
+      
+      // SEGUNDO: Enviar a miembros del grupo
+      for (const userId of groupMemberIds) {
+        this.deviceEventsService.emitNotification({
+          id_notificacion: notificacion.id_notificacion,
+          userId: userId,
+          tipo: 'CAIDA',
+          usuario: adultoMayor.nombre,
+          mensaje: notificacion.mensaje || `Caída detectada - Aceleración: ${sensorData.mpu_acceleration?.toFixed(2) || 'N/A'} g`,
+          fecha_hora: notificacion.fecha_hora.toISOString(),
+          pulso: notificacion.pulso || undefined,
+        });
+        console.log(`[FALL-DETECTION] [GROUP] Evento enviado al usuario ${userId}`);
       }
     } catch (error) {
       console.error('[FALL-DETECTION] ✗ Error al crear notificación de caída:', error);
@@ -967,35 +985,54 @@ export class DeviceService {
       });
 
       if (adultoMayor) {
-        // Recopilar todos los usuarios únicos (propietarios + miembros de grupos compartidos)
-        const usersToNotify = new Set<number>();
+        // Separar usuarios owners de miembros de grupo
+        const ownerIds = new Set<number>();
+        const groupMemberIds = new Set<number>();
         
-        // Agregar usuarios directamente vinculados
+        // 1. Recopilar usuarios directamente vinculados (OWNERS - prioridad alta)
         adultoMayor.usuariosAdultoMayor.forEach(relacion => {
-          usersToNotify.add(relacion.id_usuario);
+          ownerIds.add(relacion.id_usuario);
         });
         
-        // Agregar usuarios de grupos compartidos
+        // 2. Recopilar usuarios de grupos compartidos (miembros - prioridad normal)
         adultoMayor.sharedInGroups?.forEach(sharedDevice => {
           sharedDevice.group.members.forEach(member => {
-            usersToNotify.add(member.user_id);
+            // Solo agregar si NO es owner (evitar duplicados)
+            if (!ownerIds.has(member.user_id)) {
+              groupMemberIds.add(member.user_id);
+            }
           });
         });
 
-        console.log(`[ESP32-MAX] 📊 Enviando BPM ${dto.max_avg_bpm} a ${usersToNotify.size} usuario(s)`);
+        const totalUsers = ownerIds.size + groupMemberIds.size;
+        console.log(`[ESP32-MAX] 📊 Enviando BPM ${dto.max_avg_bpm} a ${totalUsers} usuario(s) (${ownerIds.size} owners, ${groupMemberIds.size} miembros)`);
 
-        // Emitir BPM promedio a todos los usuarios (propietarios + miembros de grupos)
-        for (const userId of usersToNotify) {
+        // 3. PRIMERO: Enviar a OWNERS (dispositivos principales)
+        for (const userId of ownerIds) {
           this.deviceEventsService.emitNotification({
-            id_notificacion: 0, // No es una notificación de BD, solo datos en tiempo real
+            id_notificacion: 0,
             userId: userId,
             tipo: 'BPM_UPDATE',
             usuario: adultoMayor.nombre,
             mensaje: undefined,
             fecha_hora: new Date().toISOString(),
-            pulso: dto.max_avg_bpm, // ⭐ Solo enviar BPM promedio
+            pulso: dto.max_avg_bpm,
           });
-          console.log(`[ESP32-MAX] 📊 BPM promedio ${dto.max_avg_bpm} enviado al usuario ${userId}`);
+          console.log(`[ESP32-MAX] 📊 [OWNER] BPM ${dto.max_avg_bpm} enviado al usuario ${userId}`);
+        }
+        
+        // 4. SEGUNDO: Enviar a miembros del grupo
+        for (const userId of groupMemberIds) {
+          this.deviceEventsService.emitNotification({
+            id_notificacion: 0,
+            userId: userId,
+            tipo: 'BPM_UPDATE',
+            usuario: adultoMayor.nombre,
+            mensaje: undefined,
+            fecha_hora: new Date().toISOString(),
+            pulso: dto.max_avg_bpm,
+          });
+          console.log(`[ESP32-MAX] 📊 [GROUP] BPM ${dto.max_avg_bpm} enviado al usuario ${userId}`);
         }
       }
 
@@ -1193,29 +1230,33 @@ export class DeviceService {
         }
       });
 
-      // Recopilar todos los usuarios únicos (propietarios + miembros de grupos compartidos)
-      const usersToNotify = new Set<number>();
+      // Separar usuarios owners de miembros de grupo
+      const ownerIds = new Set<number>();
+      const groupMemberIds = new Set<number>();
       
-      // Agregar usuarios directamente vinculados
+      // Agregar usuarios directamente vinculados (OWNERS)
       adultoMayor.usuariosAdultoMayor.forEach(relacion => {
-        usersToNotify.add(relacion.usuario.id_usuario);
+        ownerIds.add(relacion.usuario.id_usuario);
       });
       
-      // Agregar usuarios de grupos compartidos
+      // Agregar usuarios de grupos compartidos (solo si no son owners)
       sharedGroups.forEach(sharedDevice => {
         sharedDevice.group.members.forEach(member => {
-          usersToNotify.add(member.user_id);
+          if (!ownerIds.has(member.user_id)) {
+            groupMemberIds.add(member.user_id);
+          }
         });
       });
 
-      console.log(`[MPU-ALERT] 🚨 Enviando notificación EMERGENCIA a ${usersToNotify.size} usuario(s)`);
+      const totalUsers = ownerIds.size + groupMemberIds.size;
+      console.log(`[MPU-ALERT] 🚨 Enviando notificación EMERGENCIA a ${totalUsers} usuario(s) (${ownerIds.size} owners, ${groupMemberIds.size} miembros)`);
 
-      if (usersToNotify.size === 0) {
+      if (totalUsers === 0) {
         console.warn(`[MPU-ALERT] ⚠ No hay usuarios monitoreando a ${adultoMayor.nombre}`);
       }
 
-      // Emitir evento SSE urgente a todos los usuarios (propietarios + miembros de grupos)
-      for (const userId of usersToNotify) {
+      // PRIMERO: Enviar a OWNERS
+      for (const userId of ownerIds) {
         this.deviceEventsService.emitNotification({
           id_notificacion: notificacion.id_notificacion,
           userId: userId,
@@ -1224,7 +1265,20 @@ export class DeviceService {
           mensaje: notificacion.mensaje || `${adultoMayor.nombre} necesita tu ayuda rápido`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
         });
-        console.log(`[MPU-ALERT] 🔔 Notificación de EMERGENCIA enviada al usuario ${userId}`);
+        console.log(`[MPU-ALERT] 🔔 [OWNER] EMERGENCIA enviada al usuario ${userId}`);
+      }
+      
+      // SEGUNDO: Enviar a miembros del grupo
+      for (const userId of groupMemberIds) {
+        this.deviceEventsService.emitNotification({
+          id_notificacion: notificacion.id_notificacion,
+          userId: userId,
+          tipo: 'EMERGENCIA',
+          usuario: adultoMayor.nombre,
+          mensaje: notificacion.mensaje || `${adultoMayor.nombre} necesita tu ayuda rápido`,
+          fecha_hora: notificacion.fecha_hora.toISOString(),
+        });
+        console.log(`[MPU-ALERT] 🔔 [GROUP] EMERGENCIA enviada al usuario ${userId}`);
       }
     } catch (error) {
       console.error('[MPU-ALERT] ✗ Error al crear notificación de desmayo:', error);
@@ -1402,29 +1456,33 @@ export class DeviceService {
         }
       });
 
-      // Recopilar todos los usuarios únicos (propietarios + miembros de grupos compartidos)
-      const usersToNotify = new Set<number>();
+      // Separar usuarios owners de miembros de grupo
+      const ownerIds = new Set<number>();
+      const groupMemberIds = new Set<number>();
       
-      // Agregar usuarios directamente vinculados
+      // Agregar usuarios directamente vinculados (OWNERS)
       adultoMayor.usuariosAdultoMayor.forEach(relacion => {
-        usersToNotify.add(relacion.usuario.id_usuario);
+        ownerIds.add(relacion.usuario.id_usuario);
       });
       
-      // Agregar usuarios de grupos compartidos
+      // Agregar usuarios de grupos compartidos (solo si no son owners)
       sharedGroups.forEach(sharedDevice => {
         sharedDevice.group.members.forEach(member => {
-          usersToNotify.add(member.user_id);
+          if (!ownerIds.has(member.user_id)) {
+            groupMemberIds.add(member.user_id);
+          }
         });
       });
 
-      console.log(`[BUTTON-ALERT] 🚨 Enviando notificación PÁNICO a ${usersToNotify.size} usuario(s)`);
+      const totalUsers = ownerIds.size + groupMemberIds.size;
+      console.log(`[BUTTON-ALERT] 🚨 Enviando notificación PÁNICO a ${totalUsers} usuario(s) (${ownerIds.size} owners, ${groupMemberIds.size} miembros)`);
 
-      if (usersToNotify.size === 0) {
+      if (totalUsers === 0) {
         console.warn(`[BUTTON-ALERT] ⚠ No hay usuarios monitoreando a ${adultoMayor.nombre}`);
       }
 
-      // Emitir evento SSE a todos los usuarios (propietarios + miembros de grupos)
-      for (const userId of usersToNotify) {
+      // PRIMERO: Enviar a OWNERS
+      for (const userId of ownerIds) {
         this.deviceEventsService.emitNotification({
           id_notificacion: notificacion.id_notificacion,
           userId: userId,
@@ -1433,7 +1491,20 @@ export class DeviceService {
           mensaje: notificacion.mensaje || `${adultoMayor.nombre} presionó el botón de emergencia`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
         });
-        console.log(`[BUTTON-ALERT] 🔔 Notificación de PÁNICO enviada al usuario ${userId}`);
+        console.log(`[BUTTON-ALERT] 🔔 [OWNER] PÁNICO enviada al usuario ${userId}`);
+      }
+      
+      // SEGUNDO: Enviar a miembros del grupo
+      for (const userId of groupMemberIds) {
+        this.deviceEventsService.emitNotification({
+          id_notificacion: notificacion.id_notificacion,
+          userId: userId,
+          tipo: 'PANICO',
+          usuario: adultoMayor.nombre,
+          mensaje: notificacion.mensaje || `${adultoMayor.nombre} presionó el botón de emergencia`,
+          fecha_hora: notificacion.fecha_hora.toISOString(),
+        });
+        console.log(`[BUTTON-ALERT] 🔔 [GROUP] PÁNICO enviada al usuario ${userId}`);
       }
     } catch (error) {
       console.error('[BUTTON-ALERT] ✗ Error al crear notificación de botón:', error);
