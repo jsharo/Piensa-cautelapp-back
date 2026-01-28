@@ -600,32 +600,30 @@ export class DeviceService {
     console.log('[ESP32-SENSORS] Datos de sensores recibidos:', dto);
 
     try {
-      // 1. Buscar o crear el dispositivo por device_id
+      // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
         where: { device_id: dto.deviceId },
       });
 
       if (!dispositivo) {
-        console.log(`[ESP32-SENSORS] Dispositivo ${dto.deviceId} no encontrado, creando...`);
-        dispositivo = await this.prisma.dispositivo.create({
-          data: {
-            device_id: dto.deviceId,
-            bateria: dto.battery ?? 100,
-            online_status: true,
-            last_seen: new Date(),
-          },
-        });
-      } else {
-        // Actualizar estado de conexión y batería
-        dispositivo = await this.prisma.dispositivo.update({
-          where: { id_dispositivo: dispositivo.id_dispositivo },
-          data: {
-            online_status: true,
-            last_seen: new Date(),
-            ...(dto.battery !== undefined && { bateria: dto.battery }),
-          },
-        });
+        console.log(`[ESP32-SENSORS] ⚠️ Dispositivo ${dto.deviceId} no existe en BD. Ignorando datos de sensores.`);
+        console.log(`[ESP32-SENSORS] El dispositivo debe ser vinculado primero con datos del adulto mayor.`);
+        return {
+          success: false,
+          message: 'Dispositivo no vinculado. Los datos de sensores se ignorarán hasta que se vincule.',
+          deviceId: dto.deviceId,
+        };
       }
+
+      // Actualizar estado de conexión y batería del dispositivo existente
+      dispositivo = await this.prisma.dispositivo.update({
+        where: { id_dispositivo: dispositivo.id_dispositivo },
+        data: {
+          online_status: true,
+          last_seen: new Date(),
+          ...(dto.battery !== undefined && { bateria: dto.battery }),
+        },
+      });
 
       // 2. Guardar datos de sensores en la tabla SensorData
       const sensorData = await this.prisma.sensorData.create({
@@ -909,32 +907,30 @@ export class DeviceService {
     });
 
     try {
-      // 1. Buscar o crear el dispositivo por device_id
+      // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
         where: { device_id: dto.deviceId },
       });
 
       if (!dispositivo) {
-        console.log(`[ESP32-MAX] Dispositivo ${dto.deviceId} no encontrado, creando...`);
-        dispositivo = await this.prisma.dispositivo.create({
-          data: {
-            device_id: dto.deviceId,
-            bateria: dto.battery ?? 100,
-            online_status: true,
-            last_seen: new Date(),
-          },
-        });
-      } else {
-        // Actualizar estado de conexión y batería
-        dispositivo = await this.prisma.dispositivo.update({
-          where: { id_dispositivo: dispositivo.id_dispositivo },
-          data: {
-            online_status: true,
-            last_seen: new Date(),
-            bateria: dto.battery,
-          },
-        });
+        console.log(`[ESP32-MAX] ⚠️ Dispositivo ${dto.deviceId} no existe en BD. Ignorando datos MAX30102.`);
+        console.log(`[ESP32-MAX] El dispositivo debe ser vinculado primero con datos del adulto mayor.`);
+        return {
+          success: false,
+          message: 'Dispositivo no vinculado. Los datos del sensor se ignorarán hasta que se vincule.',
+          deviceId: dto.deviceId,
+        };
       }
+
+      // Actualizar estado de conexión y batería del dispositivo existente
+      dispositivo = await this.prisma.dispositivo.update({
+        where: { id_dispositivo: dispositivo.id_dispositivo },
+        data: {
+          online_status: true,
+          last_seen: new Date(),
+          bateria: dto.battery,
+        },
+      });
 
       // 2. Guardar datos del MAX30102 en la tabla SensorData
       const sensorData = await this.prisma.sensorData.create({
@@ -1063,32 +1059,31 @@ export class DeviceService {
     });
 
     try {
-      // 1. Buscar o crear el dispositivo
+      // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
         where: { device_id: dto.deviceId },
       });
 
       if (!dispositivo) {
-        console.log(`[ESP32-MPU] Dispositivo ${dto.deviceId} no encontrado, creando...`);
-        dispositivo = await this.prisma.dispositivo.create({
-          data: {
-            device_id: dto.deviceId,
-            bateria: dto.battery ?? 100,
-            online_status: true,
-            last_seen: new Date(),
-          },
-        });
-      } else {
-        // Actualizar estado
-        dispositivo = await this.prisma.dispositivo.update({
-          where: { id_dispositivo: dispositivo.id_dispositivo },
-          data: {
-            online_status: true,
-            last_seen: new Date(),
-            bateria: dto.battery,
-          },
-        });
+        console.log(`[ESP32-MPU] ⚠️⚠️ ALERTA IGNORADA: Dispositivo ${dto.deviceId} no existe en BD.`);
+        console.log(`[ESP32-MPU] El dispositivo debe ser vinculado primero antes de enviar alertas.`);
+        return {
+          success: false,
+          message: 'Dispositivo no vinculado. Las alertas se ignorarán hasta que se vincule.',
+          deviceId: dto.deviceId,
+          alert: 'ignored',
+        };
       }
+
+      // Actualizar estado del dispositivo existente
+      dispositivo = await this.prisma.dispositivo.update({
+        where: { id_dispositivo: dispositivo.id_dispositivo },
+        data: {
+          online_status: true,
+          last_seen: new Date(),
+          bateria: dto.battery,
+        },
+      });
 
       // 2. Guardar alerta en SensorData
       const sensorData = await this.prisma.sensorData.create({
@@ -1299,32 +1294,31 @@ export class DeviceService {
     });
 
     try {
-      // 1. Buscar o crear el dispositivo
+      // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
         where: { device_id: dto.deviceId },
       });
 
       if (!dispositivo) {
-        console.log(`[ESP32-BUTTON] Dispositivo ${dto.deviceId} no encontrado, creando...`);
-        dispositivo = await this.prisma.dispositivo.create({
-          data: {
-            device_id: dto.deviceId,
-            bateria: dto.battery ?? 100,
-            online_status: true,
-            last_seen: new Date(),
-          },
-        });
-      } else {
-        // Actualizar estado
-        dispositivo = await this.prisma.dispositivo.update({
-          where: { id_dispositivo: dispositivo.id_dispositivo },
-          data: {
-            online_status: true,
-            last_seen: new Date(),
-            bateria: dto.battery,
-          },
-        });
+        console.log(`[ESP32-BUTTON] ⚠️⚠️ ALERTA DE PÁNICO IGNORADA: Dispositivo ${dto.deviceId} no existe en BD.`);
+        console.log(`[ESP32-BUTTON] El dispositivo debe ser vinculado primero antes de enviar alertas.`);
+        return {
+          success: false,
+          message: 'Dispositivo no vinculado. Las alertas de pánico se ignorarán hasta que se vincule.',
+          deviceId: dto.deviceId,
+          alert: 'ignored',
+        };
       }
+
+      // Actualizar estado del dispositivo existente
+      dispositivo = await this.prisma.dispositivo.update({
+        where: { id_dispositivo: dispositivo.id_dispositivo },
+        data: {
+          online_status: true,
+          last_seen: new Date(),
+          bateria: dto.battery,
+        },
+      });
 
       // 2. Guardar alerta en SensorData
       const sensorData = await this.prisma.sensorData.create({

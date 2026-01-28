@@ -20,10 +20,11 @@ export class DeviceController {
     private readonly deviceEventsService: DeviceEventsService,
   ) {}
 
-  @Post()
-  create(@Body() createDeviceDto: CreateDeviceDto) {
-    return this.deviceService.create(createDeviceDto);
-  }
+  // ⚠️ ENDPOINT DESHABILITADO: Los dispositivos solo deben crearse al vincular con adulto mayor
+  // @Post()
+  // create(@Body() createDeviceDto: CreateDeviceDto) {
+  //   return this.deviceService.create(createDeviceDto);
+  // }
 
   @UseGuards(JwtAuthGuard)
   @Post('vincular')
