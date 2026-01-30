@@ -34,20 +34,10 @@ export class Esp32MaxDataDto {
   @IsBoolean()
   max_connected: boolean; // ¿El sensor está conectado?
 
-  // ===== Información General =====
-  @IsNotEmpty()
-  @IsNumber()
-  battery: number; // Nivel de batería (0-100)
+  // NO se requieren battery, wifi_rssi, timestamp, is_alert
+  // Estos datos se eliminaron para transmisión en tiempo real sin almacenamiento
 
-  @IsNotEmpty()
-  @IsNumber()
-  wifi_rssi: number; // Intensidad de la señal WiFi
-
-  @IsNotEmpty()
-  @IsString()
-  timestamp: string; // Timestamp ISO 8601
-
-  @IsNotEmpty()
+  @IsOptional()
   @IsBoolean()
   is_alert: boolean; // Siempre false para MAX (no son alertas)
 }

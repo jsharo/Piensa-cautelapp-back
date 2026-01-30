@@ -972,17 +972,16 @@ export class DeviceService {
    * Recibe datos periódicos de ritmo cardíaco del ESP32
    */
   async handleEsp32MaxData(dto: Esp32MaxDataDto) {
-    console.log('[ESP32-MAX] Datos MAX30102 recibidos:', {
+    console.log('[ESP32-MAX] Datos MAX30102 recibidos (tiempo real - sin guardar en DB):', {
       deviceId: dto.deviceId,
       bpm: dto.max_bpm,
       avgBpm: dto.max_avg_bpm,
       irValue: dto.max_ir_value,
-      battery: dto.battery,
     });
 
     try {
       // 1. Buscar el dispositivo (NO crear si no existe)
-      let dispositivo = await this.prisma.dispositivo.findUnique({
+      const dispositivo = await this.prisma.dispositivo.findUnique({
         where: { device_id: dto.deviceId },
       });
 
@@ -996,39 +995,18 @@ export class DeviceService {
         };
       }
 
-      // Actualizar estado de conexión y batería del dispositivo existente
-      dispositivo = await this.prisma.dispositivo.update({
+      // 2. Actualizar solo el estado de conexión (sin batería, ya que no viene en el JSON)
+      await this.prisma.dispositivo.update({
         where: { id_dispositivo: dispositivo.id_dispositivo },
         data: {
           online_status: true,
           last_seen: new Date(),
-          bateria: dto.battery,
         },
       });
 
-      // 2. Guardar datos del MAX30102 en la tabla SensorData
-      const sensorData = await this.prisma.sensorData.create({
-        data: {
-          id_dispositivo: dispositivo.id_dispositivo,
-          // Datos MAX30102
-          max_ir_value: dto.max_ir_value,
-          max_bpm: dto.max_bpm,
-          max_avg_bpm: dto.max_avg_bpm,
-          max_connected: dto.max_connected,
-          // Información general
-          battery: dto.battery,
-          wifi_rssi: dto.wifi_rssi,
-          // Clasificación
-          sensor_type: dto.sensor_type, // "MAX30102"
-          is_alert: false, // Los datos del MAX no son alertas
-          // Timestamps
-          timestamp: new Date(dto.timestamp),
-          received_at: new Date(),
-        },
-      });
-
+      // ⚠️ NO GUARDAR EN SENSORDATA - Solo transmitir en tiempo real vía SSE
       console.log(
-        `[ESP32-MAX] ✓ Datos guardados. ID: ${sensorData.id_sensor}, BPM: ${dto.max_bpm}, Avg: ${dto.max_avg_bpm}`
+        `[ESP32-MAX] 📡 Transmitiendo en tiempo real (sin DB). BPM: ${dto.max_bpm}, Avg: ${dto.max_avg_bpm}`
       );
 
       // 3. Buscar adulto mayor asociado y emitir BPM promedio via SSE
@@ -1053,8 +1031,10 @@ export class DeviceService {
         },
       });
 
+      // Separar usuarios owners de miembros de grupo
+      let totalUsers = 0;
+      
       if (adultoMayor) {
-        // Separar usuarios owners de miembros de grupo
         const ownerIds = new Set<number>();
         const groupMemberIds = new Set<number>();
         
@@ -1073,7 +1053,7 @@ export class DeviceService {
           });
         });
 
-        const totalUsers = ownerIds.size + groupMemberIds.size;
+        totalUsers = ownerIds.size + groupMemberIds.size;
         console.log(`[ESP32-MAX] 📊 Enviando BPM ${dto.max_avg_bpm} a ${totalUsers} usuario(s) (${ownerIds.size} owners, ${groupMemberIds.size} miembros)`);
 
         // 3. PRIMERO: Enviar a OWNERS (dispositivos principales)
@@ -1107,11 +1087,11 @@ export class DeviceService {
 
       return {
         success: true,
-        message: 'Datos MAX30102 registrados correctamente',
+        message: 'Datos MAX30102 transmitidos en tiempo real (sin almacenamiento)',
         deviceId: dto.deviceId,
-        sensorDataId: sensorData.id_sensor,
         bpm: dto.max_bpm,
         avgBpm: dto.max_avg_bpm,
+        streamedToUsers: totalUsers,
       };
     } catch (error) {
       console.error('[ESP32-MAX] ✗ Error al procesar datos MAX30102:', error);
