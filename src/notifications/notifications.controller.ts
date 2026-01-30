@@ -23,9 +23,8 @@ export class NotificationsController {
     console.log('\n' + '='.repeat(60));
     console.log('📥 Webhook ESP32 recibido');
     console.log('⏰', new Date().toLocaleString());
-    console.log('📱 MAC:', dto.mac_address);
+    console.log('� Device ID:', dto.deviceId);
     console.log('🔔 Tipo:', dto.tipo ?? dto.tipo_alerta);
-    if (dto.bateria !== undefined) console.log('🔋 Batería:', dto.bateria + '%');
     if (dto.ubicacion) console.log('📍 Ubicación:', dto.ubicacion);
     if (dto.mensaje || dto.mensaje_adicional) console.log('💬 Mensaje:', dto.mensaje ?? dto.mensaje_adicional);
     console.log('='.repeat(60));

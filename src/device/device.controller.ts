@@ -5,7 +5,6 @@ import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
-import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
 import { Esp32MaxDataDto } from './dto/esp32-max-data.dto';
 import { Esp32MpuAlertDto } from './dto/esp32-mpu-alert.dto';
 import { Esp32ButtonAlertDto } from './dto/esp32-button-alert.dto';
@@ -31,7 +30,7 @@ export class DeviceController {
   @Post('vincular')
   async vincularDispositivo(@Req() req: any, @Body() dto: VincularDispositivoDto) {
     const userId = req.user.id_usuario;
-    console.log('[vincularDispositivo] Usuario:', userId, 'intentando vincular:', dto.mac_address);
+    console.log('[vincularDispositivo] Usuario:', userId, 'intentando vincular:', dto.id_dispositivo);
     
     try {
       return await this.deviceService.vincularDispositivoAUsuario(userId, dto);
@@ -66,12 +65,12 @@ export class DeviceController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.deviceService.findOne(+id);
+    return this.deviceService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateDeviceDto: UpdateDeviceDto) {
-    return this.deviceService.update(+id, updateDeviceDto);
+    return this.deviceService.update(id, updateDeviceDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -124,18 +123,7 @@ export class DeviceController {
     return this.deviceService.checkDeviceExistsForUser(userId, macAddress);
   }
 
-  /**
-   * Endpoint para recibir datos de sensores del ESP32
-   * No requiere autenticación ya que es llamado por el dispositivo
-   * Recibe datos de: MPU6050 (aceleración, detección de caídas) y MAX30102 (ritmo cardíaco)
-   * 
-   * ⚠️ DEPRECADO: Este endpoint se mantiene para compatibilidad con código antiguo
-   * Usar en su lugar: /esp32/sensor-data/max o /esp32/sensor-data/mpu-alert
-   */
-  @Post('esp32/sensor-data')
-  handleEsp32SensorData(@Body() dto: Esp32SensorDataDto) {
-    return this.deviceService.handleEsp32SensorData(dto);
-  }
+
 
   /**
    * ⭐ NUEVO: Endpoint para recibir datos del sensor MAX30102 (cada 5 segundos)
@@ -205,26 +193,6 @@ export class DeviceController {
         data: event,
       } as MessageEvent))
     );
-  }
-
-  /**
-   * Obtiene el último BPM registrado de un dispositivo
-   * Usado por el frontend para mostrar el pulso actual en tiempo real
-   */
-  @UseGuards(JwtAuthGuard)
-  @Get('latest-bpm/:deviceId')
-  async getLatestBpm(@Param('deviceId') deviceId: string) {
-    const id = parseInt(deviceId);
-    return this.deviceService.getLatestBpm(id);
-  }
-
-  /**
-   * Endpoint de debug para verificar los últimos datos recibidos del ESP32
-   * Muestra los últimos 10 registros de sensor data
-   */
-  @Get('debug/latest-sensor-data')
-  async getLatestSensorData() {
-    return this.deviceService.getLatestSensorDataForDebug();
   }
 
   /**

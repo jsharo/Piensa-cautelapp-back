@@ -4,7 +4,6 @@ import { UpdateDeviceDto } from './dto/update-device.dto';
 import { VincularDispositivoDto } from './dto/vincular-dispositivo.dto';
 import { UpdateAdultoMayorDto } from './dto/update-adulto-mayor.dto';
 import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
-import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
 import { Esp32MaxDataDto } from './dto/esp32-max-data.dto';
 import { Esp32MpuAlertDto } from './dto/esp32-mpu-alert.dto';
 import { Esp32ButtonAlertDto } from './dto/esp32-button-alert.dto';
@@ -28,14 +27,13 @@ export class DeviceService {
   ) {}
 
   async create(dto: CreateDeviceDto) {
-    if (dto.mac_address) {
-      const exists = await this.prisma.dispositivo.findUnique({ where: { mac_address: dto.mac_address } });
-      if (exists) throw new ConflictException('mac_address ya registrado');
-    }
+    // Verificar si el dispositivo ya existe
+    const exists = await this.prisma.dispositivo.findUnique({ where: { id_dispositivo: dto.id_dispositivo } });
+    if (exists) throw new ConflictException('Dispositivo con ese ID ya está registrado');
+    
     const device = await this.prisma.dispositivo.create({
       data: {
-        bateria: dto.bateria ?? 100,
-        mac_address: dto.mac_address,
+        id_dispositivo: dto.id_dispositivo,
       },
     });
     return device;
@@ -45,17 +43,13 @@ export class DeviceService {
     return this.prisma.dispositivo.findMany();
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     const device = await this.prisma.dispositivo.findUnique({ where: { id_dispositivo: id } });
     if (!device) throw new NotFoundException('Dispositivo no encontrado');
     return device;
   }
 
-  async update(id: number, dto: UpdateDeviceDto) {
-    if (dto.mac_address) {
-      const exists = await this.prisma.dispositivo.findUnique({ where: { mac_address: dto.mac_address } });
-      if (exists && exists.id_dispositivo !== id) throw new ConflictException('mac_address ya registrado en otro dispositivo');
-    }
+  async update(id: string, dto: UpdateDeviceDto) {
     const device = await this.prisma.dispositivo.update({
       where: { id_dispositivo: id },
       data: dto,
@@ -63,7 +57,7 @@ export class DeviceService {
     return device;
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     try {
       // Obtener los adultos mayores vinculados a este dispositivo
       const adultosMayores = await this.prisma.adultoMayor.findMany({
@@ -214,7 +208,7 @@ export class DeviceService {
     console.log('[vincularDispositivoAUsuario]   - nombre_adulto:', dto.nombre_adulto, '(tipo:', typeof dto.nombre_adulto, ')');
     console.log('[vincularDispositivoAUsuario]   - fecha_nacimiento:', dto.fecha_nacimiento);
     console.log('[vincularDispositivoAUsuario]   - direccion:', dto.direccion);
-    console.log('[vincularDispositivoAUsuario]   - mac_address:', dto.mac_address);
+    console.log('[vincularDispositivoAUsuario]   - id_dispositivo:', dto.id_dispositivo);
     
     // 0. Verificar que el usuario existe
     const usuario = await this.prisma.usuario.findUnique({
@@ -229,30 +223,21 @@ export class DeviceService {
     console.log('[vincularDispositivoAUsuario] Usuario encontrado:', usuario.email);
 
     // 1. Buscar si el dispositivo ya existe en BD
-    let dispositivo = await this.prisma.dispositivo.findFirst({
-      where: {
-        OR: [
-          { mac_address: dto.mac_address },
-          { device_id: dto.mac_address },
-        ]
-      },
+    let dispositivo = await this.prisma.dispositivo.findUnique({
+      where: { id_dispositivo: dto.id_dispositivo }
     });
 
     if (dispositivo) {
       // ✓ Dispositivo ya existe (probablemente ya fue vinculado antes)
       console.log('[vincularDispositivoAUsuario] ✓ Dispositivo ya existe en BD:', {
-        id: dispositivo.id_dispositivo,
-        mac_address: dispositivo.mac_address,
-        device_id: dispositivo.device_id,
-        bateria: dispositivo.bateria
+        id_dispositivo: dispositivo.id_dispositivo,
       });
       
-      // Actualizar estado y batería del dispositivo existente
+      // Actualizar estado del dispositivo existente
       console.log('[vincularDispositivoAUsuario] Actualizando dispositivo existente...');
       dispositivo = await this.prisma.dispositivo.update({
         where: { id_dispositivo: dispositivo.id_dispositivo },
         data: { 
-          bateria: dto.bateria,
           online_status: true,
           last_seen: new Date(),
         },
@@ -263,9 +248,7 @@ export class DeviceService {
       console.log('[vincularDispositivoAUsuario] ⭐ Dispositivo NO existe en BD. Creándolo ahora con datos del adulto mayor...');
       dispositivo = await this.prisma.dispositivo.create({
         data: {
-          device_id: dto.mac_address,
-          mac_address: dto.mac_address,
-          bateria: dto.bateria || 100,
+          id_dispositivo: dto.id_dispositivo,
           online_status: true,
           last_seen: new Date(),
         },
@@ -299,7 +282,7 @@ export class DeviceService {
       // 3. Crear un adulto mayor asociado al dispositivo
       console.log('[vincularDispositivoAUsuario] Creando nuevo adulto mayor...');
       console.log('[vincularDispositivoAUsuario] 📋 Datos del adulto a crear:', {
-        nombre: dto.nombre_adulto || `Dispositivo ${dto.mac_address}`,
+        nombre: dto.nombre_adulto || `Dispositivo ${dto.id_dispositivo}`,
         fecha_nacimiento: dto.fecha_nacimiento,
         direccion: dto.direccion || 'Ubicación no especificada',
         id_dispositivo: dispositivo.id_dispositivo // ← VINCULACIÓN CRÍTICA
@@ -307,7 +290,7 @@ export class DeviceService {
       
       adultoMayor = await this.prisma.adultoMayor.create({
         data: {
-          nombre: dto.nombre_adulto || `Dispositivo ${dto.mac_address}`,
+          nombre: dto.nombre_adulto || `Dispositivo ${dto.id_dispositivo}`,
           fecha_nacimiento: dto.fecha_nacimiento 
             ? new Date(dto.fecha_nacimiento) 
             : new Date('1950-01-01'),
@@ -338,8 +321,6 @@ export class DeviceService {
     // 6. Si no existe la relación, crearla
     console.log('[vincularDispositivoAUsuario] ✅ VINCULACIÓN EXITOSA:', {
       dispositivo_id: dispositivo.id_dispositivo,
-      device_id: dispositivo.device_id,
-      mac_address: dispositivo.mac_address,
       adulto_id: adultoMayor.id_adulto,
       adulto_nombre: adultoMayor.nombre,
       adulto_id_dispositivo: adultoMayor.id_dispositivo, // ← Confirmar FK
@@ -455,27 +436,19 @@ export class DeviceService {
 
     try {
       // 1. VERIFICAR SI EL DISPOSITIVO YA EXISTE EN BD (para actualizar WiFi)
-      let dispositivoDbId: number | undefined;
-      const dispositivoExistente = await this.prisma.dispositivo.findFirst({
-        where: {
-          OR: [
-            { device_id: dto.deviceId },
-            { mac_address: dto.deviceId },
-          ]
-        }
+      let dispositivoDbId: string | undefined;
+      const dispositivoExistente = await this.prisma.dispositivo.findUnique({
+        where: { id_dispositivo: dto.deviceId }
       });
 
       if (dispositivoExistente) {
-        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} ya existe en BD (ID: ${dispositivoExistente.id_dispositivo}), actualizando estado WiFi...`);
+        console.log(`[ESP32-CONN] Dispositivo ${dto.deviceId} ya existe en BD, actualizando estado WiFi...`);
         // Solo actualizar estado de conexión y WiFi, NO crear si no existe
         await this.prisma.dispositivo.update({
           where: { id_dispositivo: dispositivoExistente.id_dispositivo },
           data: {
             online_status: true,
             last_seen: new Date(),
-            // Actualizar WiFi si cambió de red
-            mac_address: dispositivoExistente.mac_address || dto.deviceId,
-            device_id: dispositivoExistente.device_id || dto.deviceId,
           },
         });
         console.log(`[ESP32-CONN] ✓ Dispositivo existente actualizado en BD`);
@@ -531,18 +504,13 @@ export class DeviceService {
   /**
    * Verifica si un dispositivo existe en BD y está vinculado a un usuario
    */
-  async checkDeviceExistsForUser(userId: number, macAddress: string) {
-    console.log(`[checkDeviceExists] Usuario ${userId} verificando dispositivo ${macAddress}`);
+  async checkDeviceExistsForUser(userId: number, deviceId: string) {
+    console.log(`[checkDeviceExists] Usuario ${userId} verificando dispositivo ${deviceId}`);
 
     try {
-      // Buscar el dispositivo por mac_address o device_id
-      const dispositivo = await this.prisma.dispositivo.findFirst({
-        where: {
-          OR: [
-            { mac_address: macAddress },
-            { device_id: macAddress },
-          ]
-        },
+      // Buscar el dispositivo por id_dispositivo
+      const dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { id_dispositivo: deviceId },
         include: {
           adultos: {
             include: {
@@ -557,7 +525,7 @@ export class DeviceService {
       });
 
       if (!dispositivo) {
-        console.log(`[checkDeviceExists] Dispositivo ${macAddress} NO existe en BD`);
+        console.log(`[checkDeviceExists] Dispositivo ${deviceId} NO existe en BD`);
         return {
           exists: false,
           inDatabase: false,
@@ -571,7 +539,7 @@ export class DeviceService {
         adulto => adulto.usuariosAdultoMayor.length > 0
       );
 
-      console.log(`[checkDeviceExists] Dispositivo ${macAddress}:`, {
+      console.log(`[checkDeviceExists] Dispositivo ${deviceId}:`, {
         existe: true,
         id: dispositivo.id_dispositivo,
         tieneAdultoMayor: dispositivo.adultos.length > 0,
@@ -626,20 +594,15 @@ export class DeviceService {
     // 2. Verificar en BD (si no está en memoria)
     console.log(`[ESP32] Dispositivo ${deviceName} no encontrado en memoria, consultando BD...`);
     try {
-      const dispositivo = await this.prisma.dispositivo.findFirst({
-        where: {
-          OR: [
-            { device_id: deviceName },
-            { mac_address: deviceName },
-          ]
-        }
+      const dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { id_dispositivo: deviceName }
       });
 
       if (dispositivo) {
-        console.log(`[ESP32] Dispositivo ${deviceName} encontrado en BD (ID: ${dispositivo.id_dispositivo})`);
+        console.log(`[ESP32] Dispositivo ${deviceName} encontrado en BD`);
         return {
           connected: true,
-          deviceId: dispositivo.device_id || dispositivo.mac_address,
+          deviceId: dispositivo.id_dispositivo,
           dbId: dispositivo.id_dispositivo,
           online_status: dispositivo.online_status,
           last_seen: dispositivo.last_seen,
@@ -666,288 +629,13 @@ export class DeviceService {
     return { success: removed };
   }
 
-  /**
-   * Procesa y almacena datos de sensores enviados por el ESP32
-   * Recibe datos de MPU6050 (aceleración, detección de caídas) y MAX30102 (ritmo cardíaco)
-   * Los datos se guardan en la tabla SensorData para análisis histórico
-   */
-  async handleEsp32SensorData(dto: Esp32SensorDataDto) {
-    console.log('[ESP32-SENSORS] Datos de sensores recibidos:', dto);
 
-    try {
-      // 1. Buscar el dispositivo (NO crear si no existe)
-      let dispositivo = await this.prisma.dispositivo.findUnique({
-        where: { device_id: dto.deviceId },
-      });
 
-      if (!dispositivo) {
-        console.log(`[ESP32-SENSORS] ⚠️ Dispositivo ${dto.deviceId} no existe en BD. Ignorando datos de sensores.`);
-        console.log(`[ESP32-SENSORS] El dispositivo debe ser vinculado primero con datos del adulto mayor.`);
-        return {
-          success: false,
-          message: 'Dispositivo no vinculado. Los datos de sensores se ignorarán hasta que se vincule.',
-          deviceId: dto.deviceId,
-        };
-      }
 
-      // Actualizar estado de conexión y batería del dispositivo existente
-      dispositivo = await this.prisma.dispositivo.update({
-        where: { id_dispositivo: dispositivo.id_dispositivo },
-        data: {
-          online_status: true,
-          last_seen: new Date(),
-          ...(dto.battery !== undefined && { bateria: dto.battery }),
-        },
-      });
 
-      // 2. Guardar datos de sensores en la tabla SensorData
-      const sensorData = await this.prisma.sensorData.create({
-        data: {
-          id_dispositivo: dispositivo.id_dispositivo,
-          // Datos MPU6050
-          mpu_acceleration: dto.mpu_acceleration,
-          mpu_fall_detected: dto.mpu_fall_detected,
-          mpu_stable: dto.mpu_stable,
-          mpu_status: dto.mpu_status,
-          // Datos MAX30102
-          max_ir_value: dto.max_ir_value,
-          max_bpm: dto.max_bpm,
-          max_avg_bpm: dto.max_avg_bpm,
-          max_connected: dto.max_connected,
-          // Información general
-          battery: dto.battery,
-          wifi_ssid: dto.wifi_ssid,
-          wifi_rssi: dto.wifi_rssi,
-          // Timestamps
-          timestamp: dto.timestamp ? new Date(dto.timestamp) : new Date(),
-        },
-      });
 
-      console.log(
-        `[ESP32-SENSORS] ✓ Datos de sensor guardados. Dispositivo: ${dispositivo.device_id}, BPM: ${dto.max_bpm}, Caída: ${dto.mpu_fall_detected}`
-      );
 
-      // 3. Si se detectó una caída, crear una notificación
-      if (dto.mpu_fall_detected && dispositivo) {
-        await this.handleFallDetection(dispositivo.id_dispositivo, dto);
-      }
 
-      // 4. Emitir evento SSE si el usuario está disponible
-      if (dto.userId) {
-        this.deviceEventsService.emitSensorData({
-          deviceId: dto.deviceId,
-          userId: parseInt(dto.userId),
-          mpu_fall_detected: dto.mpu_fall_detected || false,
-          max_bpm: dto.max_bpm || 0,
-          battery: dto.battery || 0,
-        });
-        console.log(`[ESP32-SENSORS] Evento SSE emitido al usuario ${dto.userId}`);
-      }
-
-      return {
-        success: true,
-        message: 'Datos de sensores registrados correctamente',
-        deviceId: dto.deviceId,
-        sensorDataId: sensorData.id_sensor,
-      };
-    } catch (error) {
-      console.error('[ESP32-SENSORS] ✗ Error al procesar datos de sensores:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Maneja la detección de caídas del ESP32
-   * Crea una notificación y busca el adulto mayor asociado al dispositivo
-   */
-  private async handleFallDetection(
-    dispositivoId: number,
-    sensorData: Esp32SensorDataDto
-  ) {
-    console.log(`[FALL-DETECTION] Caída detectada en dispositivo ${sensorData.deviceId}`);
-
-    try {
-      // Buscar el adulto mayor asociado a este dispositivo
-      const adultoMayor = await this.prisma.adultoMayor.findFirst({
-        where: { id_dispositivo: dispositivoId },
-        include: { 
-          usuariosAdultoMayor: { select: { id_usuario: true } },
-          // ⭐ Incluir grupos compartidos
-          sharedInGroups: {
-            include: {
-              group: {
-                include: {
-                  members: {
-                    select: { user_id: true }
-                  }
-                }
-              }
-            }
-          }
-        },
-      });
-
-      if (!adultoMayor) {
-        console.warn(
-          `[FALL-DETECTION] ⚠ No se encontró adulto mayor para el dispositivo ${dispositivoId}`
-        );
-        return;
-      }
-
-      // Crear una notificación de caída
-      const notificacion = await this.prisma.notificaciones.create({
-        data: {
-          id_adulto: adultoMayor.id_adulto,
-          tipo: 'CAIDA',
-          fecha_hora: new Date(),
-          pulso: sensorData.max_avg_bpm || undefined,
-          mensaje: `Caída detectada - Aceleración: ${sensorData.mpu_acceleration?.toFixed(2) || 'N/A'} g`,
-        },
-      });
-
-      console.log(
-        `[FALL-DETECTION] ✓ Notificación de caída creada para ${adultoMayor.nombre}:`,
-        notificacion
-      );
-
-      // Separar usuarios owners de miembros de grupo
-      const ownerIds = new Set<number>();
-      const groupMemberIds = new Set<number>();
-      
-      // Agregar usuarios directamente vinculados (OWNERS)
-      adultoMayor.usuariosAdultoMayor.forEach(relacion => {
-        ownerIds.add(relacion.id_usuario);
-      });
-      
-      // Agregar usuarios de grupos compartidos (solo si no son owners)
-      adultoMayor.sharedInGroups?.forEach(sharedDevice => {
-        sharedDevice.group.members.forEach(member => {
-          if (!ownerIds.has(member.user_id)) {
-            groupMemberIds.add(member.user_id);
-          }
-        });
-      });
-
-      const totalUsers = ownerIds.size + groupMemberIds.size;
-      console.log(`[FALL-DETECTION] 🚨 Enviando alerta a ${totalUsers} usuario(s) (${ownerIds.size} owners, ${groupMemberIds.size} miembros)`);
-
-      // PRIMERO: Enviar a OWNERS
-      for (const userId of ownerIds) {
-        this.deviceEventsService.emitNotification({
-          id_notificacion: notificacion.id_notificacion,
-          userId: userId,
-          tipo: 'CAIDA',
-          usuario: adultoMayor.nombre,
-          mensaje: notificacion.mensaje || `Caída detectada - Aceleración: ${sensorData.mpu_acceleration?.toFixed(2) || 'N/A'} g`,
-          fecha_hora: notificacion.fecha_hora.toISOString(),
-          pulso: notificacion.pulso || undefined,
-        });
-        console.log(`[FALL-DETECTION] [OWNER] Evento enviado al usuario ${userId}`);
-      }
-      
-      // SEGUNDO: Enviar a miembros del grupo
-      for (const userId of groupMemberIds) {
-        this.deviceEventsService.emitNotification({
-          id_notificacion: notificacion.id_notificacion,
-          userId: userId,
-          tipo: 'CAIDA',
-          usuario: adultoMayor.nombre,
-          mensaje: notificacion.mensaje || `Caída detectada - Aceleración: ${sensorData.mpu_acceleration?.toFixed(2) || 'N/A'} g`,
-          fecha_hora: notificacion.fecha_hora.toISOString(),
-          pulso: notificacion.pulso || undefined,
-        });
-        console.log(`[FALL-DETECTION] [GROUP] Evento enviado al usuario ${userId}`);
-      }
-    } catch (error) {
-      console.error('[FALL-DETECTION] ✗ Error al crear notificación de caída:', error);
-    }
-  }
-
-  /**
-   * Obtiene el último BPM registrado de un dispositivo
-   */
-  async getLatestBpm(deviceId: number) {
-    try {
-      const latestSensorData = await this.prisma.sensorData.findFirst({
-        where: { id_dispositivo: deviceId },
-        orderBy: { received_at: 'desc' },
-        select: {
-          max_avg_bpm: true,
-          max_bpm: true,
-          timestamp: true,
-          received_at: true,
-        },
-      });
-
-      if (!latestSensorData) {
-        return { bpm: null, timestamp: null };
-      }
-
-      return {
-        bpm: latestSensorData.max_avg_bpm || latestSensorData.max_bpm || 0,
-        timestamp: latestSensorData.timestamp || latestSensorData.received_at,
-      };
-    } catch (error) {
-      console.error('[GET-BPM] Error obteniendo BPM:', error);
-      return { bpm: null, timestamp: null };
-    }
-  }
-
-  /**
-   * Método de debug para verificar los últimos datos de sensores recibidos
-   */
-  async getLatestSensorDataForDebug() {
-    try {
-      const latestData = await this.prisma.sensorData.findMany({
-        take: 10,
-        orderBy: { received_at: 'desc' },
-        include: {
-          dispositivo: {
-            include: {
-              adultos: {
-                select: {
-                  nombre: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      return {
-        success: true,
-        message: 'Últimos 10 registros de sensor data recibidos del ESP32',
-        count: latestData.length,
-        data: latestData.map(record => ({
-          id: record.id_sensor,
-          deviceId: record.id_dispositivo,
-          deviceMac: record.dispositivo.mac_address,
-          adultoMayor: record.dispositivo.adultos.length > 0
-            ? record.dispositivo.adultos[0].nombre
-            : 'Sin vincular',
-          timestamp: record.timestamp,
-          receivedAt: record.received_at,
-          bpm: record.max_avg_bpm || record.max_bpm,
-          aceleracion: record.mpu_acceleration,
-          fallDetected: record.mpu_fall_detected,
-          stable: record.mpu_stable,
-          status: record.mpu_status,
-          battery: record.battery,
-          wifi: record.wifi_ssid ? {
-            ssid: record.wifi_ssid,
-            rssi: record.wifi_rssi,
-          } : null,
-          minutesAgo: Math.round((Date.now() - new Date(record.received_at).getTime()) / 60000),
-        })),
-      };
-    } catch (error) {
-      console.error('[DEBUG] Error obteniendo sensor data:', error);
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-  }
 
   /**
    * Método de debug para ver dispositivos conectados en memoria
@@ -983,7 +671,7 @@ export class DeviceService {
     try {
       // 1. Buscar el dispositivo (NO crear si no existe)
       const dispositivo = await this.prisma.dispositivo.findUnique({
-        where: { device_id: dto.deviceId },
+        where: { id_dispositivo: dto.deviceId },
       });
 
       if (!dispositivo) {
@@ -1116,7 +804,7 @@ export class DeviceService {
     try {
       // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
-        where: { device_id: dto.deviceId },
+        where: { id_dispositivo: dto.deviceId },
       });
 
       if (!dispositivo) {
@@ -1161,13 +849,13 @@ export class DeviceService {
    * ⭐ NUEVO: Maneja la creación de notificaciones para alertas de desmayo del MPU6050
    */
   private async handleMpuFallAlert(
-    dispositivoId: number,
+    dispositivoId: string,
     alertData: Esp32MpuAlertDto
   ) {
     console.log(`[MPU-ALERT] Procesando alerta de desmayo para dispositivo ID ${dispositivoId}`);
 
     try {
-      // Buscar el dispositivo para obtener su device_id
+      // Buscar el dispositivo para obtener su id_dispositivo
       const dispositivo = await this.prisma.dispositivo.findUnique({
         where: { id_dispositivo: dispositivoId },
       });
@@ -1177,7 +865,7 @@ export class DeviceService {
         return;
       }
 
-      console.log(`[MPU-ALERT] Dispositivo encontrado: ${dispositivo.device_id} (ID: ${dispositivoId})`);
+      console.log(`[MPU-ALERT] Dispositivo encontrado: ${dispositivo.id_dispositivo}`);
 
       // Buscar el adulto mayor asociado a este dispositivo
       console.log(`[MPU-ALERT] Buscando adulto mayor con id_dispositivo = ${dispositivoId}...`);
@@ -1196,7 +884,7 @@ export class DeviceService {
 
       if (!adultoMayor) {
         console.warn(
-          `[MPU-ALERT] ⚠️ NO SE ENCONTRÓ ADULTO MAYOR para dispositivo ${dispositivo.device_id} (ID: ${dispositivoId})`
+          `[MPU-ALERT] ⚠️ NO SE ENCONTRÓ ADULTO MAYOR para dispositivo ${dispositivo.id_dispositivo}`
         );
         console.warn(`[MPU-ALERT] ⚠️ Debes vincular el dispositivo desde la app con el botón "Guardar" del modal`);
         console.warn(`[MPU-ALERT] ⚠️ Esto creará la relación: Dispositivo → AdultoMayor → Usuario`);
@@ -1210,7 +898,7 @@ export class DeviceService {
             id_notificacion: 0, // Notificación temporal sin ID de BD
             userId: userId,
             tipo: 'DESMAYO',
-            usuario: `Dispositivo ${dispositivo.device_id}`,
+            usuario: `Dispositivo ${dispositivo.id_dispositivo}`,
             mensaje: `⚠️ ${alertData.alert_type} - Dispositivo sin vincular - BPM: ${alertData.bpm}`,
             fecha_hora: new Date().toISOString(),
           });
@@ -1327,7 +1015,7 @@ export class DeviceService {
     try {
       // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
-        where: { device_id: dto.deviceId },
+        where: { id_dispositivo: dto.deviceId },
       });
 
       if (!dispositivo) {
@@ -1372,7 +1060,7 @@ export class DeviceService {
    * ⭐ NUEVO: Maneja la creación de notificaciones para alertas de botón de pánico
    */
   private async handleButtonPanicAlert(
-    dispositivoId: number,
+    dispositivoId: string,
     alertData: any
   ) {
     console.log(`[BUTTON-ALERT] Procesando alerta de botón para dispositivo ID ${dispositivoId}`);
@@ -1388,7 +1076,7 @@ export class DeviceService {
         return;
       }
 
-      console.log(`[BUTTON-ALERT] Dispositivo encontrado: ${dispositivo.device_id} (ID: ${dispositivoId})`);
+      console.log(`[BUTTON-ALERT] Dispositivo encontrado: ${dispositivo.id_dispositivo}`);
 
       // Buscar el adulto mayor asociado
       const adultoMayor = await this.prisma.adultoMayor.findFirst({
@@ -1406,7 +1094,7 @@ export class DeviceService {
 
       if (!adultoMayor) {
         console.warn(
-          `[BUTTON-ALERT] ⚠️ NO SE ENCONTRÓ ADULTO MAYOR para dispositivo ${dispositivo.device_id}`
+          `[BUTTON-ALERT] ⚠️ NO SE ENCONTRÓ ADULTO MAYOR para dispositivo ${dispositivo.id_dispositivo}`
         );
         
         // Si hay userId, enviar notificación directa
@@ -1418,7 +1106,7 @@ export class DeviceService {
             id_notificacion: 0,
             userId: userId,
             tipo: 'PANICO',
-            usuario: `Dispositivo ${dispositivo.device_id}`,
+            usuario: `Dispositivo ${dispositivo.id_dispositivo}`,
             mensaje: `⚠️ Botón de pánico presionado - Dispositivo sin vincular`,
             fecha_hora: new Date().toISOString(),
           });

@@ -24,14 +24,13 @@ export class AppController {
     try {
       // Buscar o crear el dispositivo
       const device = await this.prisma.dispositivo.upsert({
-        where: { device_id: deviceId },
+        where: { id_dispositivo: deviceId },
         update: {
           online_status: true,
           last_seen: new Date(),
         },
         create: {
-          device_id: deviceId,
-          bateria: 100, // Valor por defecto
+          id_dispositivo: deviceId,
           online_status: true,
           last_seen: new Date(),
         }
@@ -52,9 +51,6 @@ export class AppController {
       const devices = await this.prisma.dispositivo.findMany({
         select: {
           id_dispositivo: true,
-          mac_address: true,
-          bateria: true,
-          device_id: true,
           online_status: true,
           last_seen: true,
           adultos: {
@@ -69,12 +65,9 @@ export class AppController {
       return {
         status: 'ok',
         devices: devices.map(device => ({
-          id: device.id_dispositivo,
-          deviceId: device.device_id,
-          macAddress: device.mac_address,
+          id_dispositivo: device.id_dispositivo,
           isOnline: device.online_status,
           lastSeen: device.last_seen,
-          battery: device.bateria,
           adultos: device.adultos,
         }))
       };
@@ -89,12 +82,9 @@ export class AppController {
   async getDeviceStatus(@Param('deviceId') deviceId: string) {
     try {
       const device = await this.prisma.dispositivo.findUnique({
-        where: { device_id: deviceId },
+        where: { id_dispositivo: deviceId },
         select: {
           id_dispositivo: true,
-          device_id: true,
-          mac_address: true,
-          bateria: true,
           online_status: true,
           last_seen: true,
           adultos: {
@@ -116,12 +106,9 @@ export class AppController {
       return {
         status: 'ok',
         device: {
-          id: device.id_dispositivo,
-          deviceId: device.device_id,
-          macAddress: device.mac_address,
+          id_dispositivo: device.id_dispositivo,
           isOnline: device.online_status,
           lastSeen: device.last_seen,
-          battery: device.bateria,
           adultos: device.adultos,
         }
       };

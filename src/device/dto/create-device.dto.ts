@@ -1,14 +1,7 @@
-import { IsInt, IsOptional, IsString, Matches, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 
 export class CreateDeviceDto {
-	@IsOptional()
-	@IsInt()
-	@Min(0)
-	@Max(100)
-	bateria?: number;
-
-	@IsOptional()
+	@IsNotEmpty()
 	@IsString()
-	@Matches(/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i, { message: 'mac_address inválida' })
-	mac_address?: string;
+	id_dispositivo: string; // ID del dispositivo del ESP32 (ej: "CA-001", "CA-002")
 }

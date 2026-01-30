@@ -2,7 +2,7 @@ import { IsInt, IsNumber, IsOptional, IsString, IsIn, IsDateString } from 'class
 
 export class ESP32WebhookDto {
   @IsString()
-  mac_address: string;
+  deviceId: string; // ID del dispositivo ESP32 (ej: "CA-001")
 
   @IsString()
   @IsIn(['EMERGENCIA', 'AYUDA'])
@@ -26,10 +26,6 @@ export class ESP32WebhookDto {
   @IsOptional()
   @IsDateString()
   fecha_hora?: string;
-
-  @IsOptional()
-  @IsInt()
-  bateria?: number;
 
   @IsOptional()
   @IsString()

@@ -97,29 +97,20 @@ export class NotificationsService {
     }
   }
 
-  // Webhook de ESP32: encuentra dispositivo por MAC, actualiza batería, crea notificación
+  // Webhook de ESP32: encuentra dispositivo por deviceId, crea notificación
   async processESP32Webhook(dto: ESP32WebhookDto) {
-    const mac = dto.mac_address?.trim();
-    if (!mac) {
-      throw new BadRequestException('MAC address is required');
-    }
-    const dispositivoRows =
-      await this.prisma.$queryRaw<Array<{ id_dispositivo: number; bateria: number; mac_address: string | null }>>`
-      SELECT "id_dispositivo", "bateria", "mac_address"
-      FROM "Dispositivo"
-      WHERE "mac_address" = ${mac}
-      LIMIT 1
-    `;
-    const dispositivo = dispositivoRows[0];
-    if (!dispositivo) {
-      throw new NotFoundException(`Dispositivo con MAC ${dto.mac_address} no registrado`);
+    const deviceId = dto.deviceId?.trim();
+    if (!deviceId) {
+      throw new BadRequestException('deviceId is required');
     }
 
-    if (typeof dto.bateria === 'number') {
-      await this.prisma.dispositivo.update({
-        where: { id_dispositivo: dispositivo.id_dispositivo },
-        data: { bateria: dto.bateria },
-      });
+    // Buscar dispositivo por id_dispositivo
+    const dispositivo = await this.prisma.dispositivo.findUnique({
+      where: { id_dispositivo: deviceId },
+    });
+
+    if (!dispositivo) {
+      throw new NotFoundException(`Dispositivo con ID ${dto.deviceId} no registrado`);
     }
 
     const adulto = await this.prisma.adultoMayor.findFirst({
@@ -152,7 +143,7 @@ export class NotificationsService {
       include: { adulto: { include: { dispositivo: true } } },
     });
     this.logger.log(
-      `ESP32 webhook OK: tipo=${notification.tipo} id=${notification.id_notificacion} adulto=${adulto.id_adulto} (${nombreAdulto}) disp=${dispositivo.id_dispositivo} mac=${mac} mensaje="${mensajeFinal}"`,
+      `ESP32 webhook OK: tipo=${notification.tipo} id=${notification.id_notificacion} adulto=${adulto.id_adulto} (${nombreAdulto}) disp=${dispositivo.id_dispositivo} mensaje="${mensajeFinal}"`,
     );
     
     // Enviar notificación a grupos compartidos

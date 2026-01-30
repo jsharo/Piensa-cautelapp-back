@@ -38,7 +38,7 @@ model AdultoMayor {
   direccion      String
 
   // FK to Dispositivo
-  id_dispositivo Int?
+  id_dispositivo String?
   dispositivo    Dispositivo? @relation(fields: [id_dispositivo], references: [id_dispositivo])
 
   notificaciones Notificaciones[]
@@ -49,17 +49,13 @@ model AdultoMayor {
 }
 
 model Dispositivo {
-  id_dispositivo Int @id @default(autoincrement())
-  bateria        Int
-  mac_address    String? @unique
-  device_id      String? @unique // ID del dispositivo (ej: "CautelApp-D1")
-  online_status  Boolean @default(false) // Estado de conexión online/offline
+  id_dispositivo String   @id // ID del dispositivo enviado por ESP32 (ej: "CA-001", "CA-002")
+  online_status  Boolean  @default(false) // Estado de conexión online/offline
   last_seen      DateTime? // Última vez que se conectó
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
   adultos AdultoMayor[]
-  sensorData SensorData[] // Relación con datos de sensores
 
   @@map("Dispositivo")
 }
@@ -174,40 +170,4 @@ model SharedGroupDevice {
   @@map("SharedGroupDevice")
 }
 
-// ===== TABLA DE DATOS DE SENSORES =====
-// Almacena datos enviados por el ESP32 (MPU6050, MAX30102)
-model SensorData {
-  id_sensor      Int      @id @default(autoincrement())
-  id_dispositivo Int
-  dispositivo    Dispositivo @relation(fields: [id_dispositivo], references: [id_dispositivo], onDelete: Cascade)
 
-  // Datos del sensor MPU6050 (Acelerómetro - Detección de Caídas)
-  mpu_acceleration Float?     // Aceleración total en g
-  mpu_fall_detected Boolean?   // ¿Se detectó una caída?
-  mpu_stable      Boolean?    // ¿El dispositivo está estable?
-  mpu_status      String?     // Estado del MPU (FAINTING, NORMAL, etc.)
-
-  // Datos del sensor MAX30102 (Monitor de Ritmo Cardíaco)
-  max_ir_value    Float?      // Valor IR del sensor
-  max_bpm         Float?      // Pulsaciones por minuto actuales
-  max_avg_bpm     Float?      // Promedio de BPM
-  max_connected   Boolean?    // ¿El sensor está conectado?
-
-  // Información General
-  battery         Int?        // Nivel de batería (0-100)
-  wifi_ssid       String?     // SSID de la red WiFi
-  wifi_rssi       Int?        // Intensidad de la señal WiFi
-
-  // Clasificación del dato
-  sensor_type     String?     // Tipo de sensor: "MAX30102", "MPU6050"
-  alert_type      String?     // Tipo de alerta: "DESMAYO_CONFIRMADO", null si es lectura normal
-  is_alert        Boolean     @default(false) // true para alertas urgentes, false para datos normales
-
-  // Metadata
-  timestamp       DateTime    @default(now()) // Cuándo se recibieron los datos
-  received_at     DateTime    @default(now()) // Cuándo el backend recibió esto
-
-  @@index([id_dispositivo])
-  @@index([timestamp])
-  @@map("SensorData")
-}
