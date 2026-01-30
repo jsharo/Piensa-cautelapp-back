@@ -21,10 +21,127 @@ export class DeviceService {
     userId?: string;
   }>();
 
+  // ⭐ NUEVO: Mapa para rastrear el último heartbeat de cada dispositivo
+  private deviceHeartbeats = new Map<string, {
+    lastSeen: Date;
+    deviceId: string;
+    timeoutId?: NodeJS.Timeout;
+  }>();
+
+  // Timeout de desconexión: 10 segundos sin datos
+  private readonly DISCONNECT_TIMEOUT_MS = 10000;
+
   constructor(
     private prisma: PrismaService,
     private deviceEventsService: DeviceEventsService,
-  ) {}
+  ) {
+    console.log('[DeviceService] 🔍 Sistema de monitoreo de heartbeat iniciado');
+  }
+
+  /**
+   * ⭐ NUEVO: Actualiza el heartbeat de un dispositivo y programa el timeout de desconexión
+   */
+  private updateDeviceHeartbeat(deviceId: string) {
+    const existing = this.deviceHeartbeats.get(deviceId);
+    
+    // Cancelar timeout anterior si existe
+    if (existing?.timeoutId) {
+      clearTimeout(existing.timeoutId);
+    }
+
+    // Programar nuevo timeout de desconexión
+    const timeoutId = setTimeout(async () => {
+      console.log(`[HEARTBEAT] ⏰ Timeout: ${deviceId} sin datos por ${this.DISCONNECT_TIMEOUT_MS}ms`);
+      await this.handleDeviceTimeout(deviceId);
+    }, this.DISCONNECT_TIMEOUT_MS);
+
+    // Actualizar registro de heartbeat
+    this.deviceHeartbeats.set(deviceId, {
+      lastSeen: new Date(),
+      deviceId,
+      timeoutId
+    });
+
+    // console.log(`[HEARTBEAT] ✓ ${deviceId} heartbeat actualizado`);
+  }
+
+  /**
+   * ⭐ NUEVO: Maneja el timeout de un dispositivo (desconexión por inactividad)
+   */
+  private async handleDeviceTimeout(deviceId: string) {
+    console.log(`[HEARTBEAT] 🔴 Dispositivo ${deviceId} considerado DESCONECTADO`);
+    
+    try {
+      // Buscar el dispositivo en BD
+      const dispositivo = await this.prisma.dispositivo.findUnique({
+        where: { id_dispositivo: deviceId },
+        include: {
+          adultos: {
+            include: {
+              usuariosAdultoMayor: {
+                select: { id_usuario: true }
+              },
+              sharedInGroups: {
+                include: {
+                  group: {
+                    include: {
+                      members: {
+                        select: { user_id: true }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!dispositivo) {
+        console.log(`[HEARTBEAT] ⚠️ Dispositivo ${deviceId} no encontrado en BD`);
+        this.deviceHeartbeats.delete(deviceId);
+        return;
+      }
+
+      // Actualizar estado en BD
+      await this.prisma.dispositivo.update({
+        where: { id_dispositivo: dispositivo.id_dispositivo },
+        data: {
+          online_status: false,
+          last_seen: new Date()
+        }
+      });
+
+      // Recopilar todos los usuarios que deben ser notificados
+      const userIds = new Set<number>();
+      
+      dispositivo.adultos.forEach(adulto => {
+        // Agregar usuarios directamente vinculados
+        adulto.usuariosAdultoMayor.forEach(rel => {
+          userIds.add(rel.id_usuario);
+        });
+        
+        // Agregar usuarios de grupos compartidos
+        adulto.sharedInGroups?.forEach(shared => {
+          shared.group.members.forEach(member => {
+            userIds.add(member.user_id);
+          });
+        });
+      });
+
+      // Emitir evento de desconexión a todos los usuarios
+      if (userIds.size > 0) {
+        this.deviceEventsService.emitDeviceDisconnection(deviceId, Array.from(userIds));
+        console.log(`[HEARTBEAT] 📤 Notificación de desconexión enviada a ${userIds.size} usuario(s)`);
+      }
+
+      // Limpiar del mapa
+      this.deviceHeartbeats.delete(deviceId);
+      
+    } catch (error) {
+      console.error(`[HEARTBEAT] ✗ Error manejando timeout de ${deviceId}:`, error);
+    }
+  }
 
   async create(dto: CreateDeviceDto) {
     // Verificar si el dispositivo ya existe
@@ -435,6 +552,9 @@ export class DeviceService {
     console.log('[ESP32-CONN] Notificación de conexión recibida:', dto);
 
     try {
+      // ⭐ Actualizar heartbeat del dispositivo
+      this.updateDeviceHeartbeat(dto.deviceId);
+
       // 1. VERIFICAR SI EL DISPOSITIVO YA EXISTE EN BD (para actualizar WiFi)
       let dispositivoDbId: string | undefined;
       const dispositivoExistente = await this.prisma.dispositivo.findUnique({
@@ -669,6 +789,9 @@ export class DeviceService {
     });
 
     try {
+      // ⭐ Actualizar heartbeat del dispositivo
+      this.updateDeviceHeartbeat(dto.deviceId);
+
       // 1. Buscar el dispositivo (NO crear si no existe)
       const dispositivo = await this.prisma.dispositivo.findUnique({
         where: { id_dispositivo: dto.deviceId },
@@ -802,6 +925,9 @@ export class DeviceService {
     });
 
     try {
+      // ⭐ Actualizar heartbeat del dispositivo
+      this.updateDeviceHeartbeat(dto.deviceId);
+
       // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
         where: { id_dispositivo: dto.deviceId },
@@ -1013,6 +1139,9 @@ export class DeviceService {
     });
 
     try {
+      // ⭐ Actualizar heartbeat del dispositivo
+      this.updateDeviceHeartbeat(dto.deviceId);
+
       // 1. Buscar el dispositivo (NO crear si no existe)
       let dispositivo = await this.prisma.dispositivo.findUnique({
         where: { id_dispositivo: dto.deviceId },
