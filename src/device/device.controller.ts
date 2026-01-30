@@ -8,6 +8,7 @@ import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
 import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
 import { Esp32MaxDataDto } from './dto/esp32-max-data.dto';
 import { Esp32MpuAlertDto } from './dto/esp32-mpu-alert.dto';
+import { Esp32ButtonAlertDto } from './dto/esp32-button-alert.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { SseJwtAuthGuard } from '../auth/sse-jwt.guard';
 import { DeviceEventsService } from './device-events.service';
@@ -164,7 +165,7 @@ export class DeviceController {
    * No requiere autenticación ya que es llamado por el dispositivo
    */
   @Post('esp32/sensor-data/button-alert')
-  handleEsp32ButtonAlert(@Body() dto: any) {
+  handleEsp32ButtonAlert(@Body() dto: Esp32ButtonAlertDto) {
     console.log('[CONTROLLER] ⚠️ Alerta de botón de pánico recibida');
     return this.deviceService.handleEsp32ButtonAlert(dto);
   }

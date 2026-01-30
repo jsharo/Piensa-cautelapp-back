@@ -7,6 +7,7 @@ import { Esp32ConnectionDto } from './dto/esp32-connection.dto';
 import { Esp32SensorDataDto } from './dto/esp32-sensor-data.dto';
 import { Esp32MaxDataDto } from './dto/esp32-max-data.dto';
 import { Esp32MpuAlertDto } from './dto/esp32-mpu-alert.dto';
+import { Esp32ButtonAlertDto } from './dto/esp32-button-alert.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeviceEventsService } from './device-events.service';
 
@@ -1108,8 +1109,8 @@ export class DeviceService {
     console.log('[ESP32-MPU] Datos:', {
       deviceId: dto.deviceId,
       alertType: dto.alert_type,
-      acceleration: dto.mpu_acceleration,
-      status: dto.mpu_status,
+      bpm: dto.bpm,
+      timestamp: dto.timestamp,
     });
 
     try {
@@ -1135,45 +1136,20 @@ export class DeviceService {
         data: {
           online_status: true,
           last_seen: new Date(),
-          bateria: dto.battery,
         },
       });
 
-      // 2. Guardar alerta en SensorData
-      const sensorData = await this.prisma.sensorData.create({
-        data: {
-          id_dispositivo: dispositivo.id_dispositivo,
-          // Datos MPU6050
-          mpu_acceleration: dto.mpu_acceleration,
-          mpu_fall_detected: dto.mpu_fall_detected,
-          mpu_stable: dto.mpu_stable,
-          mpu_status: dto.mpu_status,
-          // Información general
-          battery: dto.battery,
-          wifi_ssid: dto.wifi_ssid,
-          wifi_rssi: dto.wifi_rssi,
-          // Clasificación (IMPORTANTE)
-          sensor_type: dto.sensor_type, // "MPU6050"
-          alert_type: dto.alert_type, // "DESMAYO_CONFIRMADO"
-          is_alert: true, // ⚠️ ESTO ES UNA ALERTA URGENTE
-          // Timestamps
-          timestamp: new Date(dto.timestamp),
-          received_at: new Date(),
-        },
-      });
+      console.log(`[ESP32-MPU] ✓ Dispositivo actualizado`);
 
-      console.log(`[ESP32-MPU] ✓ Alerta guardada. ID: ${sensorData.id_sensor}`);
-
-      // 3. Crear notificación y emitir evento SSE
+      // 2. Crear notificación y emitir evento SSE (YA NO se guarda en SensorData)
       await this.handleMpuFallAlert(dispositivo.id_dispositivo, dto);
 
       return {
         success: true,
         message: '⚠️ Alerta de desmayo procesada',
         deviceId: dto.deviceId,
-        sensorDataId: sensorData.id_sensor,
         alertType: dto.alert_type,
-        acceleration: dto.mpu_acceleration,
+        bpm: dto.bpm,
       };
     } catch (error) {
       console.error('[ESP32-MPU] ✗ Error al procesar alerta MPU:', error);
@@ -1235,7 +1211,7 @@ export class DeviceService {
             userId: userId,
             tipo: 'DESMAYO',
             usuario: `Dispositivo ${dispositivo.device_id}`,
-            mensaje: `⚠️ ${alertData.alert_type} - Dispositivo sin vincular - Aceleración: ${alertData.mpu_acceleration.toFixed(2)} g`,
+            mensaje: `⚠️ ${alertData.alert_type} - Dispositivo sin vincular - BPM: ${alertData.bpm}`,
             fecha_hora: new Date().toISOString(),
           });
           console.log(`[MPU-ALERT] 🔔 Alerta directa enviada al usuario ${userId} (dispositivo sin vincular)`);
@@ -1250,18 +1226,19 @@ export class DeviceService {
         usuarios_monitoreando: adultoMayor.usuariosAdultoMayor.length
       });
 
-      // Crear notificación de desmayo en la base de datos
+      // Crear notificación de desmayo en la base de datos con valor de BPM
       const notificacion = await this.prisma.notificaciones.create({
         data: {
           id_adulto: adultoMayor.id_adulto,
           tipo: 'EMERGENCIA',
           fecha_hora: new Date(),
           mensaje: `${adultoMayor.nombre} necesita tu ayuda rápido`,
+          pulso: alertData.bpm, // ⭐ Guardar el valor de BPM en la notificación
         },
       });
 
       console.log(
-        `[MPU-ALERT] ✓ Notificación de desmayo creada (ID: ${notificacion.id_notificacion}) para ${adultoMayor.nombre}`
+        `[MPU-ALERT] ✓ Notificación de desmayo creada (ID: ${notificacion.id_notificacion}) para ${adultoMayor.nombre} con BPM: ${alertData.bpm}`
       );
 
       // Buscar grupos compartidos para este adulto mayor
@@ -1338,12 +1315,12 @@ export class DeviceService {
    * ⭐ NUEVO: Procesa y almacena alertas del botón de pánico
    * Crea una notificación y emite eventos SSE
    */
-  async handleEsp32ButtonAlert(dto: any) {
+  async handleEsp32ButtonAlert(dto: Esp32ButtonAlertDto) {
     console.log('[ESP32-BUTTON] ⚠️⚠️⚠️ ALERTA DE BOTÓN DE PÁNICO RECIBIDA ⚠️⚠️⚠️');
     console.log('[ESP32-BUTTON] Datos:', {
       deviceId: dto.deviceId,
       alertType: dto.alert_type,
-      buttonPressed: dto.button_pressed,
+      bpm: dto.bpm,
       message: dto.message,
     });
 
@@ -1370,39 +1347,20 @@ export class DeviceService {
         data: {
           online_status: true,
           last_seen: new Date(),
-          bateria: dto.battery,
         },
       });
 
-      // 2. Guardar alerta en SensorData
-      const sensorData = await this.prisma.sensorData.create({
-        data: {
-          id_dispositivo: dispositivo.id_dispositivo,
-          // Información general
-          battery: dto.battery,
-          wifi_ssid: dto.wifi_ssid,
-          wifi_rssi: dto.wifi_rssi,
-          // Clasificación
-          sensor_type: dto.sensor_type, // "BUTTON"
-          alert_type: dto.alert_type, // "BOTON_PANICO"
-          is_alert: true, // ⚠️ ESTO ES UNA ALERTA URGENTE
-          // Timestamps
-          timestamp: new Date(dto.timestamp),
-          received_at: new Date(),
-        },
-      });
+      console.log(`[ESP32-BUTTON] ✓ Dispositivo actualizado`);
 
-      console.log(`[ESP32-BUTTON] ✓ Alerta guardada. ID: ${sensorData.id_sensor}`);
-
-      // 3. Crear notificación y emitir evento SSE
+      // 2. Crear notificación y emitir evento SSE (YA NO se guarda en SensorData)
       await this.handleButtonPanicAlert(dispositivo.id_dispositivo, dto);
 
       return {
         success: true,
         message: '⚠️ Alerta de botón de pánico procesada',
         deviceId: dto.deviceId,
-        sensorDataId: sensorData.id_sensor,
         alertType: dto.alert_type,
+        bpm: dto.bpm,
       };
     } catch (error) {
       console.error('[ESP32-BUTTON] ✗ Error al procesar alerta de botón:', error);
@@ -1475,18 +1433,19 @@ export class DeviceService {
         usuarios_monitoreando: adultoMayor.usuariosAdultoMayor.length
       });
 
-      // Crear notificación en la base de datos
+      // Crear notificación en la base de datos con valor de BPM
       const notificacion = await this.prisma.notificaciones.create({
         data: {
           id_adulto: adultoMayor.id_adulto,
           tipo: 'PANICO',
           fecha_hora: new Date(),
           mensaje: `${adultoMayor.nombre} presionó el botón de emergencia`,
+          pulso: alertData.bpm, // ⭐ Guardar el valor de BPM en la notificación
         },
       });
 
       console.log(
-        `[BUTTON-ALERT] ✓ Notificación creada (ID: ${notificacion.id_notificacion}) para ${adultoMayor.nombre}`
+        `[BUTTON-ALERT] ✓ Notificación creada (ID: ${notificacion.id_notificacion}) para ${adultoMayor.nombre} con BPM: ${alertData.bpm}`
       );
 
       // Buscar grupos compartidos para este adulto mayor
