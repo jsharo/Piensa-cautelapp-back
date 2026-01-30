@@ -62,14 +62,24 @@ export class AppController {
         }
       });
 
+      // ⭐ Timeout: 30 segundos sin datos = dispositivo offline
+      const TIMEOUT_MS = 30 * 1000;
+      const now = new Date();
+
       return {
         status: 'ok',
-        devices: devices.map(device => ({
-          id_dispositivo: device.id_dispositivo,
-          isOnline: device.online_status,
-          lastSeen: device.last_seen,
-          adultos: device.adultos,
-        }))
+        devices: devices.map(device => {
+          const lastSeenTime = device.last_seen ? new Date(device.last_seen).getTime() : 0;
+          const timeSinceLastSeen = now.getTime() - lastSeenTime;
+          const isOnline = device.online_status && (timeSinceLastSeen < TIMEOUT_MS);
+          
+          return {
+            id_dispositivo: device.id_dispositivo,
+            isOnline: isOnline,
+            lastSeen: device.last_seen,
+            adultos: device.adultos,
+          };
+        })
       };
     } catch (error) {
       console.error('[DEVICES] Error obteniendo estado de dispositivos:', error);
@@ -103,11 +113,18 @@ export class AppController {
         };
       }
       
+      // ⭐ Timeout: 30 segundos sin datos = dispositivo offline
+      const TIMEOUT_MS = 30 * 1000;
+      const now = new Date();
+      const lastSeenTime = device.last_seen ? new Date(device.last_seen).getTime() : 0;
+      const timeSinceLastSeen = now.getTime() - lastSeenTime;
+      const isOnline = device.online_status && (timeSinceLastSeen < TIMEOUT_MS);
+      
       return {
         status: 'ok',
         device: {
           id_dispositivo: device.id_dispositivo,
-          isOnline: device.online_status,
+          isOnline: isOnline,
           lastSeen: device.last_seen,
           adultos: device.adultos,
         }

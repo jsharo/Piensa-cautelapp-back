@@ -43,64 +43,28 @@ async function main() {
     linkRolPermiso(cuidadorRole.id_rol, permRead.id_permiso),
   ]);
 
-  // Usuario (email es único -> upsert)
+  // Usuario cuidador para pruebas (email único -> upsert)
   const hashedPassword = await bcrypt.hash('123456', 10);
-  const usuario = await prisma.usuario.upsert({
-    where: { email: 'admin@demo.local' },
+  await prisma.usuario.upsert({
+    where: { email: 'cuidador@demo.local' },
     update: {
-      nombre: 'Admin Demo',
+      nombre: 'Cuidador Demo',
       contrasena: hashedPassword,
-      id_rol: adminRole.id_rol,
+      id_rol: cuidadorRole.id_rol,
     },
     create: {
-      nombre: 'Admin Demo',
-      email: 'admin@demo.local',
+      nombre: 'Cuidador Demo',
+      email: 'cuidador@demo.local',
+      email_recuperacion: 'cuidador.recovery@demo.local',
       contrasena: hashedPassword,
-      id_rol: adminRole.id_rol,
+      id_rol: cuidadorRole.id_rol,
     },
   });
 
-  // Dispositivo (usar upsert para evitar conflicto por mac_address única)
-  const dispositivo = await prisma.dispositivo.upsert({
-    where: { mac_address: 'AA:BB:CC:DD:EE:FF' },
-    update: {
-      bateria: 95,
-    },
-    create: {
-      bateria: 95,
-      mac_address: 'AA:BB:CC:DD:EE:FF'
-    },
-  });
-
-  // AdultoMayor con referencia a dispositivo
-  const adulto = await prisma.adultoMayor.create({
-    data: {
-      nombre: 'Juan Pérez',
-      fecha_nacimiento: new Date('1950-01-01'),
-      direccion: 'Calle Falsa 123',
-      id_dispositivo: dispositivo.id_dispositivo,
-    },
-  });
-
-  // Relación m:n Usuario-AdultoMayor
-  await prisma.usuarioAdultoMayor.upsert({
-    where: { id_usuario_id_adulto: { id_usuario: usuario.id_usuario, id_adulto: adulto.id_adulto } },
-    update: {},
-    create: { id_usuario: usuario.id_usuario, id_adulto: adulto.id_adulto },
-  });
-
-  // Notificación de ejemplo
-  await prisma.notificaciones.create({
-    data: {
-      id_adulto: adulto.id_adulto,
-      tipo: 'emergencia',
-      fecha_hora: new Date(),
-      pulso: 82,
-      mensaje: 'Notificación de prueba (seed)'
-    },
-  });
-
-  console.log('Seed completado.');
+  console.log('✅ Seed completado: Rol cuidador, permisos y usuario de prueba creados.');
+  console.log('📧 Email: cuidador@demo.local');
+  console.log('🔑 Password: 123456');
+  console.log('📱 Vincula tu dispositivo ESP32 desde la app.');
 }
 
 main()
