@@ -46,6 +46,8 @@ export class SharedGroupService {
   }
 
   async joinGroupByCode(userId: number, code: string) {
+    console.log(`[SharedGroupService] joinGroupByCode - userId: ${userId}, code: ${code}`);
+    
     // Buscar el grupo con el código
     const group = await this.prisma.sharedGroup.findUnique({ 
       where: { code }, 
@@ -64,12 +66,28 @@ export class SharedGroupService {
     });
     
     if (!group) {
+      console.error(`[SharedGroupService] Grupo no encontrado con código: ${code}`);
       throw new Error('Código de grupo inválido');
     }
+    
+    console.log(`[SharedGroupService] Grupo encontrado: ${group.id}, miembros actuales: ${group.members.length}`);
+    
+    // Verificar que el usuario existe en la base de datos
+    const userExists = await this.prisma.usuario.findUnique({
+      where: { id_usuario: userId }
+    });
+    
+    if (!userExists) {
+      console.error(`[SharedGroupService] Usuario no encontrado en BD: ${userId}`);
+      throw new Error('Usuario no encontrado. Por favor, vuelve a iniciar sesión.');
+    }
+    
+    console.log(`[SharedGroupService] Usuario encontrado: ${userExists.email}`);
     
     // Verificar si ya es miembro
     const alreadyMember = group.members.some(m => m.user_id === userId);
     if (alreadyMember) {
+      console.log(`[SharedGroupService] Usuario ${userId} ya es miembro del grupo ${group.id}`);
       // Si ya es miembro, retornar el grupo completo con todas las relaciones
       return this.prisma.sharedGroup.findUnique({ 
         where: { id: group.id }, 
@@ -94,6 +112,8 @@ export class SharedGroupService {
     
     // El primer miembro después del creador será invitado por el creador
     const invitedBy = group.created_by;
+    
+    console.log(`[SharedGroupService] Agregando usuario ${userId} al grupo ${group.id}, invitado por ${invitedBy}`);
     
     // Agregar al usuario como nuevo miembro
     await this.prisma.sharedGroupMember.create({ 

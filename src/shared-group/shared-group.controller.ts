@@ -12,12 +12,19 @@ export class SharedGroupController {
 
   @Post('join')
   async joinGroup(@Body('userId') userId: string, @Body('code') code: string) {
-    // Convertir userId a número
-    const userIdNum = parseInt(userId as any, 10);
-    if (isNaN(userIdNum)) {
-      throw new Error('ID de usuario inválido');
+    try {
+      // Convertir userId a número
+      const userIdNum = parseInt(userId as any, 10);
+      if (isNaN(userIdNum)) {
+        throw new Error('ID de usuario inválido');
+      }
+      
+      console.log(`[SharedGroupController] Usuario ${userIdNum} intentando unirse con código: ${code}`);
+      return await this.sharedGroupService.joinGroupByCode(userIdNum, code);
+    } catch (error) {
+      console.error('[SharedGroupController] Error al unirse al grupo:', error.message);
+      throw error;
     }
-    return this.sharedGroupService.joinGroupByCode(userIdNum, code);
   }
 
   @Get('my/:userId')
