@@ -17,16 +17,32 @@ export class FirebaseService implements OnModuleInit {
     }
 
     try {
-      // Buscar el archivo de credenciales
-      const serviceAccountPath = path.join(process.cwd(), 'firebase-adminsdk-key.json');
-      
-      if (!fs.existsSync(serviceAccountPath)) {
-        console.warn('⚠️ Archivo firebase-adminsdk-key.json no encontrado. FCM no funcionará.');
-        console.warn('   Descarga la clave desde Firebase Console → Configuración → Cuentas de servicio');
-        return;
-      }
+      let serviceAccount: any;
 
-      const serviceAccount = require(serviceAccountPath);
+      // Opción 1: Usar variable de entorno FIREBASE_SERVICE_ACCOUNT (para producción)
+      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        try {
+          serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+          console.log('✅ Credenciales de Firebase cargadas desde variable de entorno');
+        } catch (parseError) {
+          console.error('❌ Error parseando FIREBASE_SERVICE_ACCOUNT:', parseError);
+          return;
+        }
+      } 
+      // Opción 2: Usar archivo local firebase-adminsdk-key.json (para desarrollo)
+      else {
+        const serviceAccountPath = path.join(process.cwd(), 'firebase-adminsdk-key.json');
+        
+        if (!fs.existsSync(serviceAccountPath)) {
+          console.warn('⚠️ Firebase no configurado: No se encontró FIREBASE_SERVICE_ACCOUNT ni firebase-adminsdk-key.json');
+          console.warn('   Para desarrollo: Descarga firebase-adminsdk-key.json desde Firebase Console');
+          console.warn('   Para producción: Configura la variable de entorno FIREBASE_SERVICE_ACCOUNT en Render');
+          return;
+        }
+
+        serviceAccount = require(serviceAccountPath);
+        console.log('✅ Credenciales de Firebase cargadas desde archivo local');
+      }
 
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
