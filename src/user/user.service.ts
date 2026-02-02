@@ -90,6 +90,37 @@ export class UserService {
     return { success: true };
   }
 
+  // Métodos para manejar tokens FCM
+  async saveFcmToken(userId: number, fcmToken: string): Promise<void> {
+    await this.prisma.usuario.update({
+      where: { id_usuario: userId },
+      data: { fcm_token: fcmToken },
+    });
+  }
+
+  async deleteFcmToken(userId: number): Promise<void> {
+    await this.prisma.usuario.update({
+      where: { id_usuario: userId },
+      data: { fcm_token: null },
+    });
+  }
+
+  async getUsersByFcmToken(): Promise<any[]> {
+    return this.prisma.usuario.findMany({
+      where: {
+        fcm_token: {
+          not: null,
+        },
+      },
+      select: {
+        id_usuario: true,
+        nombre: true,
+        email: true,
+        fcm_token: true,
+      },
+    });
+  }
+
   private async ensureDefaultRole() {
     return this.prisma.roles.upsert({ where: { id_rol: 1 }, update: {}, create: { nombre_rol: 'cuidador' } });
   }

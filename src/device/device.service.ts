@@ -9,6 +9,7 @@ import { Esp32MpuAlertDto } from './dto/esp32-mpu-alert.dto';
 import { Esp32ButtonAlertDto } from './dto/esp32-button-alert.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeviceEventsService } from './device-events.service';
+import { FirebaseService } from '../firebase/firebase.service';
 
 @Injectable()
 export class DeviceService {
@@ -34,8 +35,67 @@ export class DeviceService {
   constructor(
     private prisma: PrismaService,
     private deviceEventsService: DeviceEventsService,
+    private firebaseService: FirebaseService,
   ) {
     console.log('[DeviceService] 🔍 Sistema de monitoreo de heartbeat iniciado');
+  }
+
+  /**
+   * ⭐ NUEVO: Envía notificación tanto por SSE (app abierta) como por FCM (app cerrada)
+   */
+  private async sendNotificationToUser(
+    userId: number,
+    notificationData: {
+      id_notificacion: number;
+      tipo: string;
+      usuario: string;
+      mensaje: string;
+      fecha_hora: string;
+      pulso?: number;
+    }
+  ) {
+    // 1. Enviar por SSE (para app abierta)
+    this.deviceEventsService.emitNotification({
+      ...notificationData,
+      userId: userId,
+    });
+
+    // 2. Enviar por FCM (para app cerrada)
+    try {
+      const user = await this.prisma.usuario.findUnique({
+        where: { id_usuario: userId },
+        select: { fcm_token: true, nombre: true }
+      });
+
+      if (user && user.fcm_token) {
+        // Determinar título y emoji según tipo
+        let title = '📢 Notificación';
+        if (notificationData.tipo === 'PANICO') {
+          title = '⚠️ BOTÓN DE PÁNICO';
+        } else if (notificationData.tipo === 'EMERGENCIA') {
+          title = '🚨 EMERGENCIA';
+        } else if (notificationData.tipo === 'AYUDA') {
+          title = '⚠️ SOLICITUD DE AYUDA';
+        }
+
+        await this.firebaseService.sendNotification(
+          user.fcm_token,
+          title,
+          notificationData.mensaje,
+          {
+            tipo: notificationData.tipo.toLowerCase(),
+            notificationId: notificationData.id_notificacion.toString(),
+            usuario: notificationData.usuario,
+            timestamp: notificationData.fecha_hora,
+            pulso: notificationData.pulso?.toString() || '',
+          }
+        );
+        
+        console.log(`[FCM] ✅ Notificación enviada a ${user.nombre} (User ID: ${userId})`);
+      }
+    } catch (error) {
+      console.error(`[FCM] ❌ Error enviando notificación FCM al usuario ${userId}:`, error.message);
+    }
   }
 
   /**
@@ -1020,13 +1080,13 @@ export class DeviceService {
           const userId = parseInt(alertData.userId);
           console.log(`[MPU-ALERT] Enviando alerta directa al usuario ${userId}`);
           
-          this.deviceEventsService.emitNotification({
+          await this.sendNotificationToUser(userId, {
             id_notificacion: 0, // Notificación temporal sin ID de BD
-            userId: userId,
             tipo: 'DESMAYO',
             usuario: `Dispositivo ${dispositivo.id_dispositivo}`,
             mensaje: `⚠️ ${alertData.alert_type} - Dispositivo sin vincular - BPM: ${alertData.bpm}`,
             fecha_hora: new Date().toISOString(),
+            pulso: alertData.bpm,
           });
           console.log(`[MPU-ALERT] 🔔 Alerta directa enviada al usuario ${userId} (dispositivo sin vincular)`);
         }
@@ -1096,26 +1156,26 @@ export class DeviceService {
 
       // PRIMERO: Enviar a OWNERS
       for (const userId of ownerIds) {
-        this.deviceEventsService.emitNotification({
+        await this.sendNotificationToUser(userId, {
           id_notificacion: notificacion.id_notificacion,
-          userId: userId,
           tipo: 'EMERGENCIA',
           usuario: adultoMayor.nombre,
           mensaje: notificacion.mensaje || `${adultoMayor.nombre} necesita tu ayuda rápido`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
+          pulso: alertData.bpm,
         });
         console.log(`[MPU-ALERT] 🔔 [OWNER] EMERGENCIA enviada al usuario ${userId}`);
       }
       
       // SEGUNDO: Enviar a miembros del grupo
       for (const userId of groupMemberIds) {
-        this.deviceEventsService.emitNotification({
+        await this.sendNotificationToUser(userId, {
           id_notificacion: notificacion.id_notificacion,
-          userId: userId,
           tipo: 'EMERGENCIA',
           usuario: adultoMayor.nombre,
           mensaje: notificacion.mensaje || `${adultoMayor.nombre} necesita tu ayuda rápido`,
           fecha_hora: notificacion.fecha_hora.toISOString(),
+          pulso: alertData.bpm,
         });
         console.log(`[MPU-ALERT] 🔔 [GROUP] EMERGENCIA enviada al usuario ${userId}`);
       }
@@ -1231,9 +1291,8 @@ export class DeviceService {
           const userId = parseInt(alertData.userId);
           console.log(`[BUTTON-ALERT] Enviando alerta directa al usuario ${userId}`);
           
-          this.deviceEventsService.emitNotification({
+          await this.sendNotificationToUser(userId, {
             id_notificacion: 0,
-            userId: userId,
             tipo: 'PANICO',
             usuario: `Dispositivo ${dispositivo.id_dispositivo}`,
             mensaje: `⚠️ Botón de pánico presionado - Dispositivo sin vincular`,
@@ -1306,9 +1365,8 @@ export class DeviceService {
 
       // PRIMERO: Enviar a OWNERS
       for (const userId of ownerIds) {
-        this.deviceEventsService.emitNotification({
+        await this.sendNotificationToUser(userId, {
           id_notificacion: notificacion.id_notificacion,
-          userId: userId,
           tipo: 'PANICO',
           usuario: adultoMayor.nombre,
           mensaje: notificacion.mensaje || `${adultoMayor.nombre} presionó el botón de emergencia`,
@@ -1319,9 +1377,8 @@ export class DeviceService {
       
       // SEGUNDO: Enviar a miembros del grupo
       for (const userId of groupMemberIds) {
-        this.deviceEventsService.emitNotification({
+        await this.sendNotificationToUser(userId, {
           id_notificacion: notificacion.id_notificacion,
-          userId: userId,
           tipo: 'PANICO',
           usuario: adultoMayor.nombre,
           mensaje: notificacion.mensaje || `${adultoMayor.nombre} presionó el botón de emergencia`,

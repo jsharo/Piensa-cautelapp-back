@@ -17,6 +17,7 @@ model Usuario {
   email_recuperacion String?  @unique // Email secundario para recuperación de contraseña
   contrasena         String
   imagen             String?  // optional
+  fcm_token          String?  // Token FCM para notificaciones push
 
   // FK
   id_rol       Int

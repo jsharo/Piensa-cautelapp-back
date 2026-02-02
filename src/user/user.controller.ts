@@ -49,5 +49,22 @@ export class UserController {
   remove(@Param('id') id: string) {
     return this.userService.remove(+id);
   }
+
+  // Endpoints para manejar tokens FCM
+  @Post('fcm-token')
+  @UseGuards(JwtAuthGuard)
+  async saveFcmToken(
+    @Body() data: { userId: number; fcmToken: string; platform?: string },
+  ) {
+    await this.userService.saveFcmToken(data.userId, data.fcmToken);
+    return { message: 'Token FCM guardado exitosamente' };
+  }
+
+  @Delete('fcm-token/:userId')
+  @UseGuards(JwtAuthGuard)
+  async deleteFcmToken(@Param('userId') userId: string) {
+    await this.userService.deleteFcmToken(+userId);
+    return { message: 'Token FCM eliminado exitosamente' };
+  }
 }
 

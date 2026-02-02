@@ -4,6 +4,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { FirebaseModule } from './firebase/firebase.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -12,7 +13,7 @@ import { AlarmsModule } from './alarms/alarms.module';
 import { SharedGroupModule } from './shared-group/shared-group.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, UserModule, NotificationsModule, DeviceModule, AlarmsModule, SharedGroupModule],
+  imports: [PrismaModule, AuthModule, UserModule, NotificationsModule, FirebaseModule, DeviceModule, AlarmsModule, SharedGroupModule],
   controllers: [AppController],
   providers: [AppService, PrismaService],
 })
