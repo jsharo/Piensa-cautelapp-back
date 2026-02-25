@@ -3,12 +3,16 @@ import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ESP32WebhookDto } from './dto/esp32-webhook.dto';
+import { FirebaseService } from '../firebase/firebase.service';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private firebaseService: FirebaseService,
+  ) {}
 
   async create(createNotificationDto: CreateNotificationDto) {
     try {
@@ -181,10 +185,12 @@ export class NotificationsService {
       }
 
       // Obtener todos los usuarios únicos de todos los grupos
-      const usersToNotify = new Set<number>();
+      const usersToNotify = new Map<number, any>();
       sharedDevices.forEach(sd => {
         sd.group.members.forEach(member => {
-          usersToNotify.add(member.user_id);
+          if (!usersToNotify.has(member.user_id)) {
+            usersToNotify.set(member.user_id, member.user);
+          }
         });
       });
 
@@ -192,12 +198,94 @@ export class NotificationsService {
         `Notificación compartida con ${usersToNotify.size} usuarios en ${sharedDevices.length} grupo(s) para adulto ${adultoId}`
       );
 
-      // Aquí podrías agregar lógica adicional para enviar push notifications
-      // o almacenar las notificaciones en una tabla de notificaciones por usuario
+      // Enviar notificaciones FCM a todos los usuarios
+      await this.sendFCMToUsers(Array.from(usersToNotify.values()), notification);
       
     } catch (error) {
       this.logger.error('Error notificando a grupos compartidos:', error);
       // No lanzamos error para no bloquear la creación de la notificación principal
+    }
+  }
+
+  /**
+   * Envía notificaciones FCM a una lista de usuarios
+   */
+  private async sendFCMToUsers(users: any[], notification: any) {
+    try {
+      // Filtrar usuarios con token FCM válido
+      const tokensToSend = users
+        .filter(user => user.fcm_token)
+        .map(user => ({
+          token: user.fcm_token,
+          userId: user.id_usuario,
+          nombre: user.nombre
+        }));
+
+      if (tokensToSend.length === 0) {
+        this.logger.log('No hay usuarios con token FCM para enviar notificaciones');
+        return;
+      }
+
+      // Preparar título y mensaje
+      const tipo = notification.tipo;
+      const adultoNombre = notification.adulto?.nombre || 'Adulto Mayor';
+      
+      let title = '🚨 EMERGENCIA';
+      let body = `${adultoNombre} necesita asistencia de inmediato.`;
+      
+      if (tipo === 'AYUDA') {
+        title = '⚠️ AYUDA';
+        body = `${adultoNombre} necesita que lo ayudes en algo.`;
+      } else if (tipo === 'PANICO') {
+        title = '🆘 BOTÓN DE PÁNICO';
+        body = `${adultoNombre} ha activado el botón de pánico.`;
+      }
+
+      // Datos adicionales para la notificación
+      const data = {
+        tipo: tipo.toLowerCase(),
+        notificationId: notification.id_notificacion.toString(),
+        adultoId: notification.id_adulto.toString(),
+        timestamp: new Date().toISOString(),
+        adultoNombre: adultoNombre
+      };
+
+      // Enviar notificación multicast
+      const tokens = tokensToSend.map(t => t.token);
+      const response = await this.firebaseService.sendMulticastNotification(
+        tokens,
+        title,
+        body,
+        data
+      );
+
+      if (response) {
+        this.logger.log(`✅ FCM enviado a ${response.successCount}/${tokens.length} usuarios`);
+        
+        // Si hay fallos, podrían ser tokens inválidos
+        if (response.failureCount > 0) {
+          this.logger.warn(`⚠️ ${response.failureCount} notificaciones FCM fallaron`);
+          
+          // Limpiar tokens inválidos
+          response.responses.forEach((resp, idx) => {
+            if (!resp.success && resp.error) {
+              const errorCode = (resp.error as any).code;
+              if (errorCode === 'messaging/invalid-registration-token' || 
+                  errorCode === 'messaging/registration-token-not-registered') {
+                const invalidUser = tokensToSend[idx];
+                this.logger.warn(`Token inválido para usuario ${invalidUser.userId} (${invalidUser.nombre})`);
+                // Eliminar token inválido
+                this.prisma.usuario.update({
+                  where: { id_usuario: invalidUser.userId },
+                  data: { fcm_token: null }
+                }).catch(err => this.logger.error('Error limpiando token inválido:', err));
+              }
+            }
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error enviando notificaciones FCM:', error);
     }
   }
 
