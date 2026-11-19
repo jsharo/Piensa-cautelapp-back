@@ -33,7 +33,7 @@ export class SseJwtAuthGuard extends AuthGuard('jwt') {
         };
         
         return true;
-      } catch (error) {
+      } catch (error: any) {
         console.error('[SseJwtAuthGuard] Error verificando token:', error.message);
         return false;
       }

@@ -4,7 +4,7 @@ import sgMail = require('@sendgrid/mail');
 
 @Injectable()
 export class EmailService {
-  private transporter: nodemailer.Transporter;
+  private transporter!: nodemailer.Transporter;
   private readonly logger = new Logger(EmailService.name);
   private useSendGrid: boolean = false;
 
@@ -44,7 +44,7 @@ export class EmailService {
       this.logger.log('[DEBUG] Intentando verificar conexión SMTP...');
       await this.transporter.verify();
       this.logger.log('✅ Servidor de email conectado correctamente');
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('❌ Error al conectar con el servidor SMTP:');
       this.logger.error(`[ERROR] Mensaje: ${error.message}`);
       this.logger.error(`[ERROR] Código: ${error.code}`);
@@ -100,7 +100,7 @@ export class EmailService {
       this.logger.log(`✅ Email enviado exitosamente: ${info.messageId}`);
       this.logger.log(`[EMAIL] Respuesta del servidor: ${info.response}`);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('❌ Error al enviar email:', error);
       this.logger.error(`[EMAIL] Detalles del error: ${error.message}`);
       

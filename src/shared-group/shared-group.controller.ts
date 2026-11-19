@@ -21,7 +21,7 @@ export class SharedGroupController {
       
       console.log(`[SharedGroupController] Usuario ${userIdNum} intentando unirse con código: ${code}`);
       return await this.sharedGroupService.joinGroupByCode(userIdNum, code);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[SharedGroupController] Error al unirse al grupo:', error.message);
       throw error;
     }

@@ -9,7 +9,7 @@ import { IsNotEmpty, IsString, IsOptional, IsNumber, IsBoolean } from 'class-val
 export class Esp32SensorDataDto {
   @IsNotEmpty()
   @IsString()
-  deviceId: string; // ID del dispositivo (ej: "CautelApp-D1")
+  deviceId!: string; // ID del dispositivo (ej: "CautelApp-D1")
 
   @IsOptional()
   @IsString()

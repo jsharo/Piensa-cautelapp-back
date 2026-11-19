@@ -2,11 +2,11 @@ import { IsEmail, IsString, MinLength, IsOptional, IsBoolean } from 'class-valid
 
 export class LoginDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(6)
-  contrasena: string;
+  contrasena!: string;
 
   @IsOptional()
   @IsBoolean()

@@ -3,14 +3,14 @@ import { IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, MinLength } from 'cla
 export class RegisterDto {
   @IsString()
   @IsNotEmpty()
-  nombre: string;
+  nombre!: string;
 
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(6)
-  contrasena: string;
+  contrasena!: string;
 
   @IsOptional()
   @IsInt()

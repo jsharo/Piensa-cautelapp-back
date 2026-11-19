@@ -2,11 +2,11 @@ import { IsInt, IsNumber, IsOptional, IsString, IsIn, IsDateString } from 'class
 
 export class ESP32WebhookDto {
   @IsString()
-  deviceId: string; // ID del dispositivo ESP32 (ej: "CA-001")
+  deviceId!: string; // ID del dispositivo ESP32 (ej: "CA-001")
 
   @IsString()
   @IsIn(['EMERGENCIA', 'AYUDA'])
-  tipo: 'EMERGENCIA' | 'AYUDA';
+  tipo!: 'EMERGENCIA' | 'AYUDA';
 
   // Campos legacy para compatibilidad (no obligatorios)
   @IsOptional()

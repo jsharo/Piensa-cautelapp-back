@@ -7,7 +7,7 @@ import { IsNotEmpty, IsString, IsOptional, IsNumber, IsBoolean } from 'class-val
 export class Esp32MaxDataDto {
   @IsNotEmpty()
   @IsString()
-  deviceId: string; // ID del dispositivo (ej: "CautelApp-D1")
+  deviceId!: string; // ID del dispositivo (ej: "CautelApp-D1")
 
   @IsOptional()
   @IsString()
@@ -15,29 +15,29 @@ export class Esp32MaxDataDto {
 
   @IsNotEmpty()
   @IsString()
-  sensor_type: string; // Siempre "MAX30102"
+  sensor_type!: string; // Siempre "MAX30102"
 
   // ===== Datos del sensor MAX30102 =====
   @IsNotEmpty()
   @IsNumber()
-  max_ir_value: number; // Valor IR del sensor
+  max_ir_value!: number; // Valor IR del sensor
 
   @IsNotEmpty()
   @IsNumber()
-  max_bpm: number; // Pulsaciones por minuto actuales
+  max_bpm!: number; // Pulsaciones por minuto actuales
 
   @IsNotEmpty()
   @IsNumber()
-  max_avg_bpm: number; // Promedio de BPM
+  max_avg_bpm!: number; // Promedio de BPM
 
   @IsNotEmpty()
   @IsBoolean()
-  max_connected: boolean; // ¿El sensor está conectado?
+  max_connected!: boolean; // ¿El sensor está conectado?
 
   // NO se requieren battery, wifi_rssi, timestamp, is_alert
   // Estos datos se eliminaron para transmisión en tiempo real sin almacenamiento
 
   @IsOptional()
   @IsBoolean()
-  is_alert: boolean; // Siempre false para MAX (no son alertas)
+  is_alert?: boolean; // Siempre false para MAX (no son alertas)
 }

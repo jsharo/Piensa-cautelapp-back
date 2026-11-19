@@ -93,7 +93,7 @@ export class DeviceService {
         
         console.log(`[FCM] ✅ Notificación enviada a ${user.nombre} (User ID: ${userId})`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[FCM] ❌ Error enviando notificación FCM al usuario ${userId}:`, error.message);
     }
   }
@@ -198,7 +198,7 @@ export class DeviceService {
       // Limpiar del mapa
       this.deviceHeartbeats.delete(deviceId);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[HEARTBEAT] ✗ Error manejando timeout de ${deviceId}:`, error);
     }
   }
@@ -258,7 +258,7 @@ export class DeviceService {
       // Ahora sí eliminar el dispositivo
       await this.prisma.dispositivo.delete({ where: { id_dispositivo: id } });
       return { success: true };
-    } catch (error) {
+    } catch (error: any) {
       if (error.code === 'P2025') {
         // Prisma error: record not found
         throw new NotFoundException('Dispositivo no encontrado');
@@ -367,7 +367,7 @@ export class DeviceService {
 
       console.log(`[STOP_MONITORING] ✓ Proceso completado exitosamente`);
       return { success: true, message: 'Dispositivo eliminado completamente' };
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[STOP_MONITORING] ✗ Error en eliminación:`, error);
       if (error.code === 'P2025') {
         throw new NotFoundException('Dispositivo o relación no encontrada');
@@ -523,7 +523,7 @@ export class DeviceService {
           },
         });
         console.log('[vincularDispositivoAUsuario] Relación creada exitosamente');
-      } catch (error) {
+      } catch (error: any) {
         console.error('[vincularDispositivoAUsuario] Error al crear relación:', error);
         throw error;
       }
@@ -675,7 +675,7 @@ export class DeviceService {
         inDatabase: !!dispositivoExistente,
         userId: dto.userId,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ESP32-CONN] ✗ Error al registrar conexión:', error);
       throw error;
     }
@@ -739,7 +739,7 @@ export class DeviceService {
           ? 'Dispositivo ya vinculado' 
           : 'Dispositivo existe pero no está vinculado'
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('[checkDeviceExists] Error:', error);
       return {
         exists: false,
@@ -789,7 +789,7 @@ export class DeviceService {
           source: 'database'
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[ESP32] Error consultando BD para ${deviceName}:`, error);
     }
 
@@ -965,7 +965,7 @@ export class DeviceService {
         avgBpm: dto.max_avg_bpm,
         streamedToUsers: totalUsers,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ESP32-MAX] ✗ Error al procesar datos MAX30102:', error);
       throw error;
     }
@@ -1025,7 +1025,7 @@ export class DeviceService {
         alertType: dto.alert_type,
         bpm: dto.bpm,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ESP32-MPU] ✗ Error al procesar alerta MPU:', error);
       throw error;
     }
@@ -1179,7 +1179,7 @@ export class DeviceService {
         });
         console.log(`[MPU-ALERT] 🔔 [GROUP] EMERGENCIA enviada al usuario ${userId}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[MPU-ALERT] ✗ Error al crear notificación de desmayo:', error);
       console.error('[MPU-ALERT] Stack:', error.stack);
     }
@@ -1239,7 +1239,7 @@ export class DeviceService {
         alertType: dto.alert_type,
         bpm: dto.bpm,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ESP32-BUTTON] ✗ Error al procesar alerta de botón:', error);
       throw error;
     }
@@ -1386,7 +1386,7 @@ export class DeviceService {
         });
         console.log(`[BUTTON-ALERT] 🔔 [GROUP] PÁNICO enviada al usuario ${userId}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[BUTTON-ALERT] ✗ Error al crear notificación de botón:', error);
       console.error('[BUTTON-ALERT] Stack:', error.stack);
     }

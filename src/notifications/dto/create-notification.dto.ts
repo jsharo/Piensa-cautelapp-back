@@ -3,11 +3,11 @@ import { IsString, IsOptional, IsDateString, IsNumber, IsIn } from 'class-valida
 // Alineado al modelo Prisma `Notificaciones`
 export class CreateNotificationDto {
   @IsNumber()
-  id_adulto: number;
+  id_adulto!: number;
 
   @IsString()
   @IsIn(['EMERGENCIA', 'AYUDA'])
-  tipo: 'EMERGENCIA' | 'AYUDA';
+  tipo!: 'EMERGENCIA' | 'AYUDA';
 
   @IsOptional()
   @IsDateString()

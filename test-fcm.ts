@@ -69,7 +69,7 @@ async function testFCM() {
       console.log('   npx ts-node test-fcm.ts TU_TOKEN_FCM_AQUI');
     }
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('\n❌ Error durante la prueba:', error.message);
     console.error('\n🔍 Verifica que:');
     console.error('   1. El archivo firebase-adminsdk-key.json esté en la raíz del proyecto');

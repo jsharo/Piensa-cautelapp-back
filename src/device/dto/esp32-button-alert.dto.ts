@@ -7,7 +7,7 @@ import { IsNotEmpty, IsString, IsOptional, IsNumber } from 'class-validator';
 export class Esp32ButtonAlertDto {
   @IsNotEmpty()
   @IsString()
-  deviceId: string; // ID del dispositivo (ej: "CA-1")
+  deviceId!: string; // ID del dispositivo (ej: "CA-1")
 
   @IsOptional()
   @IsString()
@@ -15,21 +15,21 @@ export class Esp32ButtonAlertDto {
 
   @IsNotEmpty()
   @IsString()
-  sensor_type: string; // Siempre "BUTTON"
+  sensor_type!: string; // Siempre "BUTTON"
 
   @IsNotEmpty()
   @IsString()
-  alert_type: string; // Tipo de alerta: "BOTON_PANICO"
+  alert_type!: string; // Tipo de alerta: "BOTON_PANICO"
 
   @IsNotEmpty()
   @IsNumber()
-  bpm: number; // Pulso cardíaco al momento de la alerta
+  bpm!: number; // Pulso cardíaco al momento de la alerta
 
   @IsNotEmpty()
   @IsString()
-  message: string; // Mensaje de la alerta
+  message!: string; // Mensaje de la alerta
 
   @IsNotEmpty()
   @IsString()
-  timestamp: string; // Timestamp ISO 8601
+  timestamp!: string; // Timestamp ISO 8601
 }

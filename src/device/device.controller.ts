@@ -34,7 +34,7 @@ export class DeviceController {
     
     try {
       return await this.deviceService.vincularDispositivoAUsuario(userId, dto);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[vincularDispositivo] Error:', error.message);
       throw error;
     }

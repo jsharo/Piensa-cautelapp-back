@@ -50,7 +50,7 @@ export class FirebaseService implements OnModuleInit {
 
       this.initialized = true;
       console.log('✅ Firebase Admin SDK inicializado correctamente');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error inicializando Firebase Admin SDK:', error);
       console.warn('   FCM no estará disponible');
     }
@@ -93,7 +93,7 @@ export class FirebaseService implements OnModuleInit {
       const response = await admin.messaging().send(message);
       console.log('✅ Notificación FCM enviada:', response);
       return response;
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error enviando notificación FCM:', error);
       
       // Si el token es inválido, devolver null para que se pueda eliminar
@@ -159,7 +159,7 @@ export class FirebaseService implements OnModuleInit {
       }
       
       return response;
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error enviando notificaciones FCM multicast:', error);
       throw error;
     }
@@ -180,7 +180,7 @@ export class FirebaseService implements OnModuleInit {
         data: { test: 'true' },
       });
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Token FCM inválido:', fcmToken);
       return false;
     }

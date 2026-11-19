@@ -3,7 +3,7 @@ import { IsNotEmpty, IsString, IsOptional, IsNumber } from 'class-validator';
 export class Esp32ConnectionDto {
   @IsNotEmpty()
   @IsString()
-  deviceId: string;
+  deviceId!: string;
 
   @IsOptional()
   @IsString()
@@ -11,11 +11,11 @@ export class Esp32ConnectionDto {
 
   @IsNotEmpty()
   @IsString()
-  ssid: string;
+  ssid!: string;
 
   @IsNotEmpty()
   @IsString()
-  ip: string;
+  ip!: string;
 
   @IsOptional()
   @IsNumber()

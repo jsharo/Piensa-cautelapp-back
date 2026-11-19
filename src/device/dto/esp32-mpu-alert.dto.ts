@@ -8,7 +8,7 @@ import { IsNotEmpty, IsString, IsOptional, IsNumber } from 'class-validator';
 export class Esp32MpuAlertDto {
   @IsNotEmpty()
   @IsString()
-  deviceId: string; // ID del dispositivo (ej: "CautelApp-D1")
+  deviceId!: string; // ID del dispositivo (ej: "CautelApp-D1")
 
   @IsOptional()
   @IsString()
@@ -16,17 +16,17 @@ export class Esp32MpuAlertDto {
 
   @IsNotEmpty()
   @IsString()
-  sensor_type: string; // Siempre "MPU6050"
+  sensor_type!: string; // Siempre "MPU6050"
 
   @IsNotEmpty()
   @IsString()
-  alert_type: string; // Tipo de alerta: "DESMAYO_CONFIRMADO"
+  alert_type!: string; // Tipo de alerta: "DESMAYO_CONFIRMADO"
 
   @IsNotEmpty()
   @IsNumber()
-  bpm: number; // Pulso cardíaco al momento de la alerta
+  bpm!: number; // Pulso cardíaco al momento de la alerta
 
   @IsNotEmpty()
   @IsString()
-  timestamp: string; // Timestamp ISO 8601
+  timestamp!: string; // Timestamp ISO 8601
 }
