@@ -1,6 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
-import sgMail = require('@sendgrid/mail');
+import { BrevoClient, BrevoError } from '@getbrevo/brevo';
+import { PasswordResetMailer } from './password-reset-mailer';
+
+const DISPLAY_NAME_LIMIT = 70;
+
+function readEnv(name: string): string {
+  return process.env[name]?.trim() ?? '';
+}
+
+function displayName(value: string, fallback: string): string {
+  const cleaned = value.replace(/[\r\n\t]/g, ' ').trim();
+  const chosen = cleaned || fallback;
+  return Array.from(chosen).slice(0, DISPLAY_NAME_LIMIT).join('');
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -12,83 +24,61 @@ function escapeHtml(value: string): string {
 }
 
 @Injectable()
-export class EmailService {
-  private transporter!: nodemailer.Transporter;
+export class EmailService implements PasswordResetMailer {
   private readonly logger = new Logger(EmailService.name);
-  private useSendGrid: boolean = false;
+  private readonly client: BrevoClient | null;
+  private readonly senderEmail: string;
+  private readonly senderName: string;
 
   constructor() {
-    if (process.env.SENDGRID_API_KEY) {
-      this.useSendGrid = true;
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      this.logger.log('SendGrid configurado');
-      return;
-    }
+    const apiKey = readEnv('BREVO_API_KEY');
+    this.senderEmail = readEnv('BREVO_SENDER_EMAIL');
+    this.senderName = displayName(readEnv('BREVO_SENDER_NAME'), 'Tatara');
+    this.client = apiKey
+      ? new BrevoClient({
+          apiKey,
+          maxRetries: 1,
+          timeoutInSeconds: 15,
+          logging: { silent: true },
+        })
+      : null;
 
-    const port = parseInt(process.env.SMTP_PORT || '465', 10);
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port,
-      secure: port === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-    this.logger.log(this.canSend() ? 'SMTP configurado' : 'SMTP no configurado');
     if (this.canSend()) {
-      this.verifyConnection();
-    }
-  }
-
-  private async verifyConnection() {
-    try {
-      this.logger.log('[DEBUG] Intentando verificar conexión SMTP...');
-      await this.transporter.verify();
-      this.logger.log('✅ Servidor de email conectado correctamente');
-    } catch {
-      this.logger.error('No se pudo conectar con el servidor SMTP');
-      this.logger.warn('Configura SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASS en el archivo .env');
+      this.logger.log('Brevo configurado');
+    } else {
+      this.logger.warn('Brevo no configurado: define BREVO_API_KEY y BREVO_SENDER_EMAIL');
     }
   }
 
   canSend(): boolean {
-    return this.useSendGrid || Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+    return Boolean(this.client && this.senderEmail.includes('@'));
   }
 
   async sendPasswordResetEmail(email: string, code: string, userName?: string): Promise<boolean> {
+    if (!this.client || !this.canSend()) {
+      this.logger.error('No se envió el correo de recuperación: Brevo no está configurado');
+      return false;
+    }
+
+    const recipientName = displayName(userName ?? '', 'Usuario');
+
     try {
-      this.logger.log('Iniciando envío de correo de recuperación');
-
-      if (this.useSendGrid) {
-        const msg = {
-          to: email,
-          from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER || 'noreply@cautelapp.com',
-          subject: 'Código de Recuperación de Contraseña - CautelApp',
-          html: this.getPasswordResetEmailTemplate(escapeHtml(code), escapeHtml(userName || 'Usuario')),
-        };
-
-        await sgMail.send(msg);
-        this.logger.log('Correo de recuperación enviado por SendGrid');
-        return true;
-      }
-
-      if (!this.canSend()) {
-        this.logger.error('No se envió el correo de recuperación: SMTP no está configurado');
-        return false;
-      }
-
-      const info = await this.transporter.sendMail({
-        from: `"CautelApp - Recuperación de Contraseña" <${process.env.SMTP_USER}>`,
-        to: email,
-        subject: 'Código de Recuperación de Contraseña - CautelApp',
-        html: this.getPasswordResetEmailTemplate(escapeHtml(code), escapeHtml(userName || 'Usuario')),
+      await this.client.transactionalEmails.sendTransacEmail({
+        sender: { email: this.senderEmail, name: this.senderName },
+        to: [{ email, name: recipientName, contactPixelTrackingConsent: false }],
+        subject: '🔐 Código de Recuperación de Contraseña - Tatara',
+        htmlContent: this.getPasswordResetEmailTemplate(escapeHtml(code), escapeHtml(recipientName)),
+        textContent: `Hola ${recipientName}. Tu código de verificación de Tatara es ${code}. Expira en 15 minutos. Si no solicitaste este cambio, ignora este mensaje.`,
       });
-
-      this.logger.log(`Correo de recuperación enviado: ${info.messageId}`);
+      this.logger.log('Correo de recuperación enviado');
       return true;
-    } catch {
-      this.logger.error('No se pudo enviar el correo de recuperación');
+    } catch (error: unknown) {
+      const status = error instanceof BrevoError ? error.statusCode : undefined;
+      this.logger.error(
+        status === undefined
+          ? 'No se pudo enviar el correo de recuperación'
+          : `No se pudo enviar el correo de recuperación (HTTP ${status})`,
+      );
       return false;
     }
   }
@@ -100,7 +90,7 @@ export class EmailService {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Recuperación de Contraseña - CautelApp</title>
+        <title>Recuperación de Contraseña - Tatara</title>
         <style>
           body {
             margin: 0;
@@ -203,7 +193,7 @@ export class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🔐 CautelApp</h1>
+            <h1>🔐 Tatara</h1>
           </div>
           
           <div class="content">
@@ -229,12 +219,12 @@ export class EmailService {
             
             <p class="message">
               Este código es único y solo puede usarse una vez. 
-              Ingrésalo en la aplicación CautelApp para crear tu nueva contraseña.
+              Ingrésalo en la aplicación Tatara para crear tu nueva contraseña.
             </p>
           </div>
           
           <div class="footer">
-            <p><strong>CautelApp</strong> - Sistema de Monitoreo para Adultos Mayores</p>
+            <p><strong>Tatara</strong> - Sistema de Monitoreo para Adultos Mayores</p>
             <p>Este es un email automático, por favor no respondas a este mensaje.</p>
           </div>
         </div>

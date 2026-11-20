@@ -1,9 +1,10 @@
 import { createHmac, randomInt, timingSafeEqual } from 'crypto';
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { EmailService } from '../email/email.service';
+import { PASSWORD_RESET_MAILER } from '../email/password-reset-mailer';
+import type { PasswordResetMailer } from '../email/password-reset-mailer';
 import { normalizeEmail } from './normalize-email';
 import { getJwtSecret } from './jwt-secret';
 
@@ -24,11 +25,11 @@ type ResetRow = {
 export class PasswordResetService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly emailService: EmailService,
+    @Inject(PASSWORD_RESET_MAILER) private readonly mailer: PasswordResetMailer,
   ) {}
 
   async requestCode(email: string): Promise<{ message: string }> {
-    if (!this.emailService.canSend()) {
+    if (!this.mailer.canSend()) {
       throw new ServiceUnavailableException(
         'El envío de correo no está disponible. Inténtalo más tarde.',
       );
@@ -88,7 +89,7 @@ export class PasswordResetService {
       return { message: GENERIC_MESSAGE };
     }
 
-    const sent = await this.emailService.sendPasswordResetEmail(canonical, code, user.nombre);
+    const sent = await this.mailer.sendPasswordResetEmail(canonical, code, user.nombre);
     if (!sent) {
       await this.prisma.passwordReset.deleteMany({ where: { email: canonical, code: codeHash } });
     }
