@@ -2,6 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import sgMail = require('@sendgrid/mail');
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 @Injectable()
 export class EmailService {
   private transporter!: nodemailer.Transporter;
@@ -9,32 +18,25 @@ export class EmailService {
   private useSendGrid: boolean = false;
 
   constructor() {
-    // Log para debug de variables de entorno
-    this.logger.log(`[DEBUG] SMTP_HOST: ${process.env.SMTP_HOST || 'NO CONFIGURADO'}`);
-    this.logger.log(`[DEBUG] SMTP_PORT: ${process.env.SMTP_PORT || 'NO CONFIGURADO'}`);
-    this.logger.log(`[DEBUG] SMTP_USER: ${process.env.SMTP_USER || 'NO CONFIGURADO'}`);
-    this.logger.log(`[DEBUG] SMTP_PASS existe: ${process.env.SMTP_PASS ? 'SÍ' : 'NO'}`);
-    this.logger.log(`[DEBUG] SMTP_PASS longitud: ${process.env.SMTP_PASS?.length || 0} caracteres`);
-    this.logger.log(`[DEBUG] SENDGRID_API_KEY existe: ${process.env.SENDGRID_API_KEY ? 'SÍ' : 'NO'}`);
-    
-    // Si existe SendGrid API Key, usarlo (recomendado para producción)
     if (process.env.SENDGRID_API_KEY) {
       this.useSendGrid = true;
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      this.logger.log('✅ SendGrid configurado correctamente');
-    } else {
-      // Fallback a SMTP
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT || '465'),
-        secure: true, // true para 465, false para otros puertos
-        auth: {
-          user: process.env.SMTP_USER, // Tu email
-          pass: process.env.SMTP_PASS, // Tu contraseña o app password
-        },
-      });
+      this.logger.log('SendGrid configurado');
+      return;
+    }
 
-      // Verificar la configuración
+    const port = parseInt(process.env.SMTP_PORT || '465', 10);
+    this.transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port,
+      secure: port === 465,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+    this.logger.log(this.canSend() ? 'SMTP configurado' : 'SMTP no configurado');
+    if (this.canSend()) {
       this.verifyConnection();
     }
   }
@@ -44,75 +46,50 @@ export class EmailService {
       this.logger.log('[DEBUG] Intentando verificar conexión SMTP...');
       await this.transporter.verify();
       this.logger.log('✅ Servidor de email conectado correctamente');
-    } catch (error: any) {
-      this.logger.error('❌ Error al conectar con el servidor SMTP:');
-      this.logger.error(`[ERROR] Mensaje: ${error.message}`);
-      this.logger.error(`[ERROR] Código: ${error.code}`);
-      this.logger.error(`[ERROR] Comando: ${error.command}`);
-      this.logger.warn('⚠️  No se pudo conectar al servidor de email. Los emails se mostrarán en consola.');
+    } catch {
+      this.logger.error('No se pudo conectar con el servidor SMTP');
       this.logger.warn('Configura SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASS en el archivo .env');
     }
   }
 
+  canSend(): boolean {
+    return this.useSendGrid || Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+  }
+
   async sendPasswordResetEmail(email: string, code: string, userName?: string): Promise<boolean> {
     try {
-      this.logger.log(`[EMAIL] Iniciando envío de email a: ${email}`);
-      
-      // Intentar con SendGrid primero
+      this.logger.log('Iniciando envío de correo de recuperación');
+
       if (this.useSendGrid) {
-        this.logger.log(`[EMAIL] Usando SendGrid para enviar email...`);
         const msg = {
           to: email,
           from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER || 'noreply@cautelapp.com',
-          subject: '🔐 Código de Recuperación de Contraseña - CautelApp',
-          html: this.getPasswordResetEmailTemplate(code, userName || 'Usuario'),
+          subject: 'Código de Recuperación de Contraseña - CautelApp',
+          html: this.getPasswordResetEmailTemplate(escapeHtml(code), escapeHtml(userName || 'Usuario')),
         };
-        
+
         await sgMail.send(msg);
-        this.logger.log(`✅ Email enviado exitosamente vía SendGrid`);
-        return true;
-      }
-      
-      this.logger.log(`[EMAIL] SMTP_USER configurado: ${process.env.SMTP_USER ? 'Sí' : 'No'}`);
-      this.logger.log(`[EMAIL] SMTP_PASS configurado: ${process.env.SMTP_PASS ? 'Sí (oculto)' : 'No'}`);
-      
-      // Si no hay configuración de SMTP, solo mostrar en consola
-      if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-        this.logger.log(`\n${'='.repeat(60)}`);
-        this.logger.log(`📧 EMAIL DE RECUPERACIÓN DE CONTRASEÑA`);
-        this.logger.log(`${'='.repeat(60)}`);
-        this.logger.log(`Para: ${email}`);
-        this.logger.log(`Nombre: ${userName || 'Usuario'}`);
-        this.logger.log(`Código: ${code}`);
-        this.logger.log(`${'='.repeat(60)}\n`);
+        this.logger.log('Correo de recuperación enviado por SendGrid');
         return true;
       }
 
-      // Enviar email real
-      this.logger.log(`[EMAIL] Enviando email real vía SMTP...`);
+      if (!this.canSend()) {
+        this.logger.error('No se envió el correo de recuperación: SMTP no está configurado');
+        return false;
+      }
+
       const info = await this.transporter.sendMail({
         from: `"CautelApp - Recuperación de Contraseña" <${process.env.SMTP_USER}>`,
         to: email,
-        subject: '🔐 Código de Recuperación de Contraseña - CautelApp',
-        html: this.getPasswordResetEmailTemplate(code, userName || 'Usuario'),
+        subject: 'Código de Recuperación de Contraseña - CautelApp',
+        html: this.getPasswordResetEmailTemplate(escapeHtml(code), escapeHtml(userName || 'Usuario')),
       });
 
-      this.logger.log(`✅ Email enviado exitosamente: ${info.messageId}`);
-      this.logger.log(`[EMAIL] Respuesta del servidor: ${info.response}`);
+      this.logger.log(`Correo de recuperación enviado: ${info.messageId}`);
       return true;
-    } catch (error: any) {
-      this.logger.error('❌ Error al enviar email:', error);
-      this.logger.error(`[EMAIL] Detalles del error: ${error.message}`);
-      
-      // Fallback: mostrar en consola si falla el envío
-      this.logger.log(`\n${'='.repeat(60)}`);
-      this.logger.log(`📧 EMAIL DE RECUPERACIÓN (FALLBACK)`);
-      this.logger.log(`${'='.repeat(60)}`);
-      this.logger.log(`Para: ${email}`);
-      this.logger.log(`Código: ${code}`);
-      this.logger.log(`${'='.repeat(60)}\n`);
-      
-      return true; // Retornar true de todos modos en desarrollo
+    } catch {
+      this.logger.error('No se pudo enviar el correo de recuperación');
+      return false;
     }
   }
 

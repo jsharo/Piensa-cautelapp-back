@@ -5,19 +5,21 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { EmailModule } from '../email/email.module';
+import { PasswordResetService } from './password-reset.service';
+import { LoginAttemptTracker } from './login-attempt.tracker';
+import { getJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'change-me',
-      // cast to satisfy type across jwt implementations
-      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any },
+      secret: getJwtSecret(),
+      signOptions: { expiresIn: '7d' },
     }),
     EmailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, PasswordResetService, LoginAttemptTracker],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

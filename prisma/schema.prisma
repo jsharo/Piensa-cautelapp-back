@@ -1,5 +1,5 @@
 // Prisma 5/7 compatible schema
-// No enums per user request
+// Esquema integrado: RBAC funcional + SharedGroups + Requisitos de Tesis (CCAM)
 
 generator client {
   provider = "prisma-client-js"
@@ -16,47 +16,58 @@ model Usuario {
   email              String   @unique
   email_recuperacion String?  @unique // Email secundario para recuperación de contraseña
   contrasena         String
-  imagen             String?  // optional
-  fcm_token          String?  // Token FCM para notificaciones push
+  imagen             String?  // Opcional
+  fcm_token          String?  // Token FCM para notificaciones push en segundo plano
+  token_version      Int      @default(0)
 
-  // FK
-  id_rol       Int
-  rol          Roles    @relation(fields: [id_rol], references: [id_rol])
+  // FK Rol (Mantiene tu sistema RBAC original)
+  id_rol             Int
+  rol                Roles    @relation(fields: [id_rol], references: [id_rol])
 
-  // m:n with AdultoMayor via join table
-  usuariosAdultoMayor UsuarioAdultoMayor[]
-
-  // Relación con grupos compartidos
+  // Relaciones
+  usuariosAdultoMayor    UsuarioAdultoMayor[]
   sharedGroupMemberships SharedGroupMember[]
+  alertasAtendidas       Notificaciones[] @relation("AlertasAtendidas")
+
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
   @@map("Usuario")
 }
 
 model AdultoMayor {
-  id_adulto      Int       @id @default(autoincrement())
-  nombre         String
-  fecha_nacimiento DateTime
-  direccion      String
+  id_adulto          Int      @id @default(autoincrement())
+  nombre             String
+  fecha_nacimiento   DateTime
+  direccion          String
 
-  // FK to Dispositivo
-  id_dispositivo String?
-  dispositivo    Dispositivo? @relation(fields: [id_dispositivo], references: [id_dispositivo])
+  // NUEVO: Agregado por los resultados de las encuestas del CCAM (Medicina y Psicología)
+  antecedentes_medicos String? // Enfermedades base y medicamentos de alerta
+  notas_psicologicas   String? // Notas clave sobre cómo tranquilizar o tratar a la persona en crisis
 
-  notificaciones Notificaciones[]
+  // FK a Dispositivo
+  id_dispositivo     String?  @unique
+  dispositivo        Dispositivo? @relation(fields: [id_dispositivo], references: [id_dispositivo])
+
+  notificaciones      Notificaciones[]
   usuariosAdultoMayor UsuarioAdultoMayor[]
-  sharedInGroups SharedGroupDevice[] // Grupos que tienen acceso a este dispositivo
+  sharedInGroups      SharedGroupDevice[] // Grupos que tienen acceso a este dispositivo
+
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
 
   @@map("AdultoMayor")
 }
 
 model Dispositivo {
-  id_dispositivo String   @id // ID del dispositivo enviado por ESP32 (ej: "CA-001", "CA-002")
-  online_status  Boolean  @default(false) // Estado de conexión online/offline
+  id_dispositivo String    @id // ID del dispositivo enviado por ESP32 (ej: "ESP32_PULSERA_01")
+  online_status  Boolean   @default(false) // Estado de conexión online/offline
   last_seen      DateTime? // Última vez que se conectó
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
 
-  adultos AdultoMayor[]
+  adulto         AdultoMayor?
+
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
 
   @@map("Dispositivo")
 }
@@ -66,10 +77,18 @@ model Notificaciones {
   id_adulto       Int
   adulto          AdultoMayor @relation(fields: [id_adulto], references: [id_adulto])
 
-  tipo           String
-  fecha_hora     DateTime
-  pulso          Int?
-  mensaje        String?
+  tipo            String   // Ej: "FALL_DETECTED", "BOTON_PANICO", "HEART_RATE_ABNORMAL"
+  fecha_hora      DateTime @default(now())
+  pulso           Int?     // Frecuencia cardíaca (BPM) en el momento del evento
+  spo2            Int?     // NUEVO: Oxigenación en sangre capturada por el MAX30102
+  mensaje         String?  // Descripción del evento
+
+  // NUEVO: Control de estado y auditoría para las acciones de la app móvil
+  estado          String   @default("PENDING") // PENDING (Pendiente), EN_ROUTE (Voy en camino), RESOLVED (Atendida)
+  atendido_by_id  Int?     // FK a Usuario que atendió o tomó la alerta
+  atendido_por    Usuario? @relation("AlertasAtendidas", fields: [atendido_by_id], references: [id_usuario])
+  nota_atencion   String?  // Nota escrita por el cuidador sobre lo ocurrido
+  atendida_at     DateTime? // Hora exacta en que se marcó como atendida
 
   @@map("Notificaciones")
 }
@@ -79,7 +98,7 @@ model Roles {
   nombre_rol  String
   descripcion String?
 
-  usuarios Usuario[]
+  usuarios    Usuario[]
   rolesPermisos RolesPermisos[]
 
   @@map("Roles")
@@ -110,65 +129,60 @@ model UsuarioAdultoMayor {
   id_usuario Int
   id_adulto  Int
 
-  usuario Usuario     @relation(fields: [id_usuario], references: [id_usuario])
-  adulto  AdultoMayor @relation(fields: [id_adulto], references: [id_adulto])
+  usuario Usuario     @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+  adulto  AdultoMayor @relation(fields: [id_adulto], references: [id_adulto], onDelete: Cascade)
 
   @@id([id_usuario, id_adulto])
   @@map("Usuario-AdultoMayor")
 }
 
 model PasswordReset {
-  email     String    @id
+  email     String   @id
   code      String
   expiresAt DateTime
+  attempts  Int      @default(0)
 
   @@map("PasswordReset")
 }
 
-// --- INVITACIÓN POR ENLACE/CÓDIGO ---
+// --- GESTIÓN DE GRUPOS COMPARTIDOS (Se mantiene intacto y funcional) ---
 model SharedGroup {
-  id              Int      @id @default(autoincrement())
-  name            String?
-  code            String   @unique // Código de invitación único
-  created_by      Int      // FK a Usuario
-  created_at      DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  name          String?
+  code          String   @unique // Código de invitación único
+  created_by    Int      // FK a Usuario
+  created_at    DateTime @default(now())
 
-  // Relaciones
-  members         SharedGroupMember[]
-  sharedDevices   SharedGroupDevice[] // Dispositivos compartidos en este grupo
+  members       SharedGroupMember[]
+  sharedDevices SharedGroupDevice[] // Dispositivos compartidos en este grupo
 
   @@map("SharedGroup")
 }
 
 model SharedGroupMember {
-  id          Int      @id @default(autoincrement())
-  group_id    Int
-  user_id     Int
-  invited_by  Int?     // FK a Usuario (quién invitó a este miembro, null si es el creador)
-  joined_at   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  group_id   Int
+  user_id    Int
+  invited_by Int?     // FK a Usuario (quién invitó a este miembro)
+  joined_at  DateTime @default(now())
 
-  // Relaciones
-  group       SharedGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
-  user        Usuario     @relation(fields: [user_id], references: [id_usuario], onDelete: Cascade)
+  group      SharedGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  user       Usuario     @relation(fields: [user_id], references: [id_usuario], onDelete: Cascade)
 
   @@unique([group_id, user_id])
   @@map("SharedGroupMember")
 }
 
-// Tabla intermedia: qué dispositivos (AdultoMayor) están compartidos en cada grupo
 model SharedGroupDevice {
-  id              Int      @id @default(autoincrement())
-  group_id        Int
-  adulto_id       Int      // FK a AdultoMayor (quien tiene el dispositivo)
-  shared_by       Int      // FK a Usuario (quién compartió)
-  shared_at       DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  group_id   Int
+  adulto_id  Int      // FK a AdultoMayor (quien tiene el dispositivo)
+  shared_by  Int      // FK a Usuario (quién compartió)
+  shared_at  DateTime @default(now())
 
-  // Relaciones
-  group           SharedGroup  @relation(fields: [group_id], references: [id], onDelete: Cascade)
-  adulto          AdultoMayor  @relation(fields: [adulto_id], references: [id_adulto], onDelete: Cascade)
+  group      SharedGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  adulto     AdultoMayor @relation(fields: [adulto_id], references: [id_adulto], onDelete: Cascade)
 
   @@unique([group_id, adulto_id]) // Un dispositivo solo puede compartirse una vez por grupo
   @@map("SharedGroupDevice")
 }
-
-

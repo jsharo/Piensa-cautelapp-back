@@ -1,12 +1,16 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.guard';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { AuthenticatedUser } from './auth-user';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(private readonly auth: AuthService) {}
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -20,23 +24,25 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@Req() req: any) {
-    console.log('[auth/me] Usuario autenticado con ID:', req.user.id_usuario);
+  me(@Req() req: { user?: AuthenticatedUser }) {
+    if (!req.user?.id_usuario) {
+      throw new UnauthorizedException('Token inválido');
+    }
     return this.auth.me(req.user.id_usuario);
   }
 
   @Post('forgot-password')
-  forgotPassword(@Body() body: { email: string }) {
-    return this.auth.forgotPassword(body.email);
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.auth.requestPasswordReset(dto.email);
   }
 
   @Post('verify-reset-code')
-  verifyResetCode(@Body() body: { email: string; code: string }) {
-    return this.auth.verifyResetCode(body.email, body.code);
+  verifyResetCode(@Body() dto: VerifyResetCodeDto) {
+    return this.auth.verifyResetCode(dto.email, dto.code);
   }
 
   @Post('reset-password')
-  resetPassword(@Body() body: { email: string; code: string; newPassword: string }) {
-    return this.auth.resetPassword(body.email, body.code, body.newPassword);
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto.email, dto.code, dto.newPassword);
   }
 }

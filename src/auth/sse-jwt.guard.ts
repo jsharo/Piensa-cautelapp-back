@@ -1,45 +1,50 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../prisma/prisma.service';
+import { getJwtSecret } from './jwt-secret';
+import { JwtPayload, toAuthenticatedUser } from './auth-user';
 
 /**
- * Guard para SSE que permite JWT desde query params o header
- * EventSource no soporta headers personalizados, así que el token se pasa como query param
+ * Guard para SSE que permite JWT desde query params o header.
+ * EventSource no soporta headers personalizados, así que el token se pasa como query param.
  */
 @Injectable()
 export class SseJwtAuthGuard extends AuthGuard('jwt') {
-  constructor(private jwtService: JwtService) {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+  ) {
     super();
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    
-    // Intentar obtener token desde query params primero (para SSE)
     const tokenFromQuery = request.query?.token;
-    
-    if (tokenFromQuery) {
+
+    if (typeof tokenFromQuery === 'string' && tokenFromQuery.length > 0) {
       try {
-        // Verificar y decodificar el token
-        const payload = this.jwtService.verify(tokenFromQuery, {
-          secret: process.env.JWT_SECRET || 'change-me',
+        const payload = this.jwtService.verify<JwtPayload>(tokenFromQuery, {
+          secret: getJwtSecret(),
         });
-        
-        // Adjuntar el usuario al request
-        request.user = {
-          id_usuario: payload.id_usuario || payload.sub,
-          email: payload.email,
-          role: payload.role,
-        };
-        
+        const authUser = toAuthenticatedUser(payload);
+        const current = await this.prisma.usuario.findUnique({
+          where: { id_usuario: authUser.id_usuario },
+          select: { token_version: true },
+        });
+        if (!current || current.token_version !== authUser.token_version) {
+          throw new UnauthorizedException('Token inválido');
+        }
+        request.user = authUser;
         return true;
-      } catch (error: any) {
-        console.error('[SseJwtAuthGuard] Error verificando token:', error.message);
-        return false;
+      } catch (error) {
+        if (error instanceof UnauthorizedException) {
+          throw error;
+        }
+        throw new UnauthorizedException('Token inválido');
       }
     }
-    
-    // Si no hay token en query, intentar el flujo normal (header)
+
     return super.canActivate(context) as Promise<boolean>;
   }
 }

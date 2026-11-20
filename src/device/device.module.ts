@@ -3,11 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { DeviceService } from './device.service';
 import { DeviceController } from './device.controller';
 import { DeviceEventsService } from './device-events.service';
+import { getJwtSecret } from '../auth/jwt-secret';
 
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'change-me',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '24h' },
     }),
   ],

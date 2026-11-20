@@ -1,7 +1,34 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
+
+const publicUserSelect = {
+  select: {
+    id_usuario: true,
+    nombre: true,
+    email: true,
+    imagen: true,
+    id_rol: true,
+  },
+};
+
+const sharedAdultoSelect = {
+  select: {
+    id_adulto: true,
+    nombre: true,
+    fecha_nacimiento: true,
+    direccion: true,
+    id_dispositivo: true,
+    dispositivo: {
+      select: {
+        id_dispositivo: true,
+        online_status: true,
+        last_seen: true,
+      },
+    },
+  },
+};
 
 @Injectable()
 export class SharedGroupService {
@@ -29,16 +56,20 @@ export class SharedGroupService {
       include: {
         members: {
           include: {
-            user: true
+            user: {
+              select: {
+                id_usuario: true,
+                nombre: true,
+                email: true,
+                imagen: true,
+                id_rol: true,
+              },
+            }
           }
         },
         sharedDevices: {
           include: {
-            adulto: {
-              include: {
-                dispositivo: true
-              }
-            }
+            adulto: sharedAdultoSelect
           }
         }
       }
@@ -46,118 +77,70 @@ export class SharedGroupService {
   }
 
   async joinGroupByCode(userId: number, code: string) {
-    console.log(`[SharedGroupService] joinGroupByCode - userId: ${userId}, code: ${code}`);
-    
-    // Buscar el grupo con el código
-    const group = await this.prisma.sharedGroup.findUnique({ 
-      where: { code }, 
-      include: { 
+    const group = await this.prisma.sharedGroup.findUnique({
+      where: { code },
+      include: {
         members: true,
         sharedDevices: {
           include: {
-            adulto: {
-              include: {
-                dispositivo: true
-              }
-            }
+            adulto: sharedAdultoSelect
           }
         }
-      } 
+      }
     });
-    
+
     if (!group) {
-      console.error(`[SharedGroupService] Grupo no encontrado con código: ${code}`);
-      throw new Error('Código de grupo inválido');
+      throw new NotFoundException('Código de grupo inválido');
     }
-    
-    console.log(`[SharedGroupService] Grupo encontrado: ${group.id}, miembros actuales: ${group.members.length}`);
-    
-    // Verificar que el usuario existe en la base de datos
+
     const userExists = await this.prisma.usuario.findUnique({
-      where: { id_usuario: userId }
+      where: { id_usuario: userId },
+      select: { id_usuario: true },
     });
-    
     if (!userExists) {
-      console.error(`[SharedGroupService] Usuario no encontrado en BD: ${userId}`);
-      throw new Error('Usuario no encontrado. Por favor, vuelve a iniciar sesión.');
+      throw new NotFoundException('Usuario no encontrado. Por favor, vuelve a iniciar sesión.');
     }
-    
-    console.log(`[SharedGroupService] Usuario encontrado: ${userExists.email}`);
-    
-    // Verificar si ya es miembro
+
     const alreadyMember = group.members.some(m => m.user_id === userId);
     if (alreadyMember) {
-      console.log(`[SharedGroupService] Usuario ${userId} ya es miembro del grupo ${group.id}`);
-      // Si ya es miembro, retornar el grupo completo con todas las relaciones
-      return this.prisma.sharedGroup.findUnique({ 
-        where: { id: group.id }, 
-        include: { 
-          members: { 
-            include: { 
-              user: true 
-            } 
-          },
-          sharedDevices: {
-            include: {
-              adulto: {
-                include: {
-                  dispositivo: true
-                }
-              }
-            }
-          }
-        } 
-      });
+      return this.groupWithMembers(group.id);
     }
-    
-    // El primer miembro después del creador será invitado por el creador
+
     const invitedBy = group.created_by;
-    
-    console.log(`[SharedGroupService] Agregando usuario ${userId} al grupo ${group.id}, invitado por ${invitedBy}`);
-    
-    // Agregar al usuario como nuevo miembro
-    await this.prisma.sharedGroupMember.create({ 
-      data: { 
-        group_id: group.id, 
-        user_id: userId,
-        invited_by: invitedBy
-      } 
-    });
-    
-    // Retornar el grupo completo con todas las relaciones
-    return this.prisma.sharedGroup.findUnique({ 
-      where: { id: group.id }, 
-      include: { 
-        members: { 
-          include: { 
-            user: true 
-          } 
-        },
-        sharedDevices: {
-          include: {
-            adulto: {
-              include: {
-                dispositivo: true
-              }
-            }
-          }
+    try {
+      await this.prisma.sharedGroupMember.create({
+        data: {
+          group_id: group.id,
+          user_id: userId,
+          invited_by: invitedBy
         }
-      } 
-    });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return this.groupWithMembers(group.id);
+      }
+      throw error;
+    }
+
+    return this.groupWithMembers(group.id);
   }
 
   async getGroupByUser(userId: number) {
     return this.prisma.sharedGroup.findMany({
       where: { members: { some: { user_id: userId } } },
       include: { 
-        members: { include: { user: true } },
+        members: { include: { user: {
+              select: {
+                id_usuario: true,
+                nombre: true,
+                email: true,
+                imagen: true,
+                id_rol: true,
+              },
+            } } },
         sharedDevices: {
           include: {
-            adulto: {
-              include: {
-                dispositivo: true
-              }
-            }
+            adulto: sharedAdultoSelect
           }
         }
       },
@@ -165,13 +148,34 @@ export class SharedGroupService {
   }
 
   async getGroupByCode(code: string) {
-    return this.prisma.sharedGroup.findUnique({ where: { code }, include: { members: { include: { user: true } } } });
+    const group = await this.prisma.sharedGroup.findUnique({
+      where: { code },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        created_by: true,
+        created_at: true,
+        _count: { select: { members: true } },
+      },
+    });
+    if (!group) {
+      throw new NotFoundException('Código de grupo inválido');
+    }
+    return {
+      id: group.id,
+      name: group.name,
+      code: group.code,
+      created_by: group.created_by,
+      created_at: group.created_at,
+      memberCount: group._count.members,
+    };
   }
 
   async leaveGroup(userId: number, groupId: number) {
     // Verificar si el usuario es el creador del grupo
     const group = await this.prisma.sharedGroup.findUnique({ where: { id: groupId } });
-    if (!group) throw new Error('Grupo no encontrado');
+    if (!group) throw new NotFoundException('Grupo no encontrado');
     
     // Si es el creador, eliminar todo el grupo
     if (group.created_by === userId) {
@@ -194,22 +198,22 @@ export class SharedGroupService {
       where: { id: groupId },
       include: { members: true }
     });
-    if (!group) throw new Error('Grupo no encontrado');
+    if (!group) throw new NotFoundException('Grupo no encontrado');
 
     // Solo el creador puede expulsar miembros
     if (group.created_by !== requesterId) {
-      throw new Error('Solo el creador del grupo puede expulsar miembros');
+      throw new ForbiddenException('Solo el creador del grupo puede expulsar miembros');
     }
 
     // No puede expulsar al creador
     if (memberIdToRemove === group.created_by) {
-      throw new Error('No se puede expulsar al creador del grupo');
+      throw new BadRequestException('No se puede expulsar al creador del grupo');
     }
 
     // Verificar que el miembro existe en el grupo
     const memberExists = group.members.some(m => m.user_id === memberIdToRemove);
     if (!memberExists) {
-      throw new Error('El usuario no es miembro del grupo');
+      throw new NotFoundException('El usuario no es miembro del grupo');
     }
 
     // Expulsar al miembro
@@ -226,7 +230,8 @@ export class SharedGroupService {
     };
   }
 
-  async getGroupMembers(groupId: number) {
+  async getGroupMembers(groupId: number, userId: number) {
+    await this.assertMember(groupId, userId);
     const group = await this.prisma.sharedGroup.findUnique({
       where: { id: groupId },
       include: {
@@ -245,7 +250,7 @@ export class SharedGroupService {
       }
     });
 
-    if (!group) throw new Error('Grupo no encontrado');
+    if (!group) throw new NotFoundException('Grupo no encontrado');
 
     return {
       group_id: group.id,
@@ -268,36 +273,39 @@ export class SharedGroupService {
     const member = await this.prisma.sharedGroupMember.findFirst({
       where: { group_id: groupId, user_id: sharedBy }
     });
-    if (!member) throw new Error('No eres miembro de este grupo');
+    if (!member) throw new ForbiddenException('No eres miembro de este grupo');
 
     // Verificar que el adulto/dispositivo existe
     const adulto = await this.prisma.adultoMayor.findUnique({
       where: { id_adulto: adultoId },
-      include: { dispositivo: true }
+      select: { id_adulto: true },
     });
-    if (!adulto) throw new Error('Dispositivo no encontrado');
+    if (!adulto) throw new NotFoundException('Dispositivo no encontrado');
 
     // Verificar que el usuario tiene acceso al dispositivo
     const hasAccess = await this.prisma.usuarioAdultoMayor.findFirst({
       where: { id_usuario: sharedBy, id_adulto: adultoId }
     });
-    if (!hasAccess) throw new Error('No tienes permiso para compartir este dispositivo');
+    if (!hasAccess) throw new ForbiddenException('No tienes permiso para compartir este dispositivo');
 
     // Compartir el dispositivo con el grupo
-    return this.prisma.sharedGroupDevice.create({
-      data: {
-        group_id: groupId,
-        adulto_id: adultoId,
-        shared_by: sharedBy
-      },
-      include: {
-        adulto: {
-          include: {
-            dispositivo: true
-          }
+    try {
+      return await this.prisma.sharedGroupDevice.create({
+        data: {
+          group_id: groupId,
+          adulto_id: adultoId,
+          shared_by: sharedBy
+        },
+        include: {
+          adulto: sharedAdultoSelect
         }
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Este dispositivo ya está compartido en el grupo');
       }
-    });
+      throw error;
+    }
   }
 
   async unshareDeviceFromGroup(groupId: number, adultoId: number, userId: number) {
@@ -305,14 +313,14 @@ export class SharedGroupService {
     const sharedDevice = await this.prisma.sharedGroupDevice.findFirst({
       where: { group_id: groupId, adulto_id: adultoId }
     });
-    if (!sharedDevice) throw new Error('Este dispositivo no está compartido en el grupo');
+    if (!sharedDevice) throw new NotFoundException('Este dispositivo no está compartido en el grupo');
 
     // Solo el que compartió o el creador del grupo pueden descompartir
     const group = await this.prisma.sharedGroup.findUnique({ where: { id: groupId } });
-    if (!group) throw new Error('Grupo no encontrado');
+    if (!group) throw new NotFoundException('Grupo no encontrado');
     
     if (sharedDevice.shared_by !== userId && group.created_by !== userId) {
-      throw new Error('No tienes permiso para descompartir este dispositivo');
+      throw new ForbiddenException('No tienes permiso para descompartir este dispositivo');
     }
 
     await this.prisma.sharedGroupDevice.delete({
@@ -321,15 +329,12 @@ export class SharedGroupService {
     return { message: 'Dispositivo descompartido exitosamente' };
   }
 
-  async getSharedDevicesInGroup(groupId: number) {
+  async getSharedDevicesInGroup(groupId: number, userId: number) {
+    await this.assertMember(groupId, userId);
     return this.prisma.sharedGroupDevice.findMany({
       where: { group_id: groupId },
       include: {
-        adulto: {
-          include: {
-            dispositivo: true
-          }
-        }
+        adulto: sharedAdultoSelect
       }
     });
   }
@@ -341,11 +346,7 @@ export class SharedGroupService {
       include: {
         sharedDevices: {
           include: {
-            adulto: {
-              include: {
-                dispositivo: true
-              }
-            }
+            adulto: sharedAdultoSelect
           }
         }
       }
@@ -361,5 +362,28 @@ export class SharedGroupService {
     );
 
     return allSharedDevices;
+  }
+
+  private async assertMember(groupId: number, userId: number): Promise<void> {
+    if (!Number.isInteger(groupId) || groupId <= 0) {
+      throw new BadRequestException('Identificador de grupo inválido');
+    }
+    const member = await this.prisma.sharedGroupMember.findFirst({
+      where: { group_id: groupId, user_id: userId },
+      select: { id: true },
+    });
+    if (!member) {
+      throw new ForbiddenException('No perteneces a este grupo');
+    }
+  }
+
+  private groupWithMembers(groupId: number) {
+    return this.prisma.sharedGroup.findUnique({
+      where: { id: groupId },
+      include: {
+        members: { include: { user: publicUserSelect } },
+        sharedDevices: { include: { adulto: sharedAdultoSelect } },
+      },
+    });
   }
 }

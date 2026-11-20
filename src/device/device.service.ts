@@ -136,7 +136,7 @@ export class DeviceService {
       const dispositivo = await this.prisma.dispositivo.findUnique({
         where: { id_dispositivo: deviceId },
         include: {
-          adultos: {
+          adulto: {
             include: {
               usuariosAdultoMayor: {
                 select: { id_usuario: true }
@@ -175,19 +175,20 @@ export class DeviceService {
       // Recopilar todos los usuarios que deben ser notificados
       const userIds = new Set<number>();
       
-      dispositivo.adultos.forEach(adulto => {
+      const adultoVinculado = dispositivo.adulto;
+      if (adultoVinculado) {
         // Agregar usuarios directamente vinculados
-        adulto.usuariosAdultoMayor.forEach(rel => {
+        adultoVinculado.usuariosAdultoMayor.forEach(rel => {
           userIds.add(rel.id_usuario);
         });
-        
+
         // Agregar usuarios de grupos compartidos
-        adulto.sharedInGroups?.forEach(shared => {
+        adultoVinculado.sharedInGroups?.forEach(shared => {
           shared.group.members.forEach(member => {
             userIds.add(member.user_id);
           });
         });
-      });
+      }
 
       // Emitir evento de desconexión a todos los usuarios
       if (userIds.size > 0) {
@@ -692,7 +693,7 @@ export class DeviceService {
       const dispositivo = await this.prisma.dispositivo.findUnique({
         where: { id_dispositivo: deviceId },
         include: {
-          adultos: {
+          adulto: {
             include: {
               usuariosAdultoMayor: {
                 where: {
@@ -714,15 +715,17 @@ export class DeviceService {
         };
       }
 
+      const adultosVinculados = dispositivo.adulto ? [dispositivo.adulto] : [];
+
       // Verificar si tiene adulto mayor vinculado al usuario
-      const tieneAdultoMayorVinculado = dispositivo.adultos.some(
+      const tieneAdultoMayorVinculado = adultosVinculados.some(
         adulto => adulto.usuariosAdultoMayor.length > 0
       );
 
       console.log(`[checkDeviceExists] Dispositivo ${deviceId}:`, {
         existe: true,
         id: dispositivo.id_dispositivo,
-        tieneAdultoMayor: dispositivo.adultos.length > 0,
+        tieneAdultoMayor: adultosVinculados.length > 0,
         vinculadoAlUsuario: tieneAdultoMayorVinculado
       });
 
@@ -731,7 +734,7 @@ export class DeviceService {
         inDatabase: true,
         vinculado: tieneAdultoMayorVinculado,
         dispositivoId: dispositivo.id_dispositivo,
-        adultosMayores: dispositivo.adultos.map(a => ({
+        adultosMayores: adultosVinculados.map(a => ({
           id_adulto: a.id_adulto,
           nombre: a.nombre
         })),

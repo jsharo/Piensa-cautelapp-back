@@ -53,7 +53,7 @@ export class AppController {
           id_dispositivo: true,
           online_status: true,
           last_seen: true,
-          adultos: {
+          adulto: {
             select: {
               id_adulto: true,
               nombre: true,
@@ -77,7 +77,7 @@ export class AppController {
             id_dispositivo: device.id_dispositivo,
             isOnline: isOnline,
             lastSeen: device.last_seen,
-            adultos: device.adultos,
+            adultos: device.adulto ? [device.adulto] : [],
           };
         })
       };
@@ -97,7 +97,7 @@ export class AppController {
           id_dispositivo: true,
           online_status: true,
           last_seen: true,
-          adultos: {
+          adulto: {
             select: {
               id_adulto: true,
               nombre: true,
@@ -126,7 +126,7 @@ export class AppController {
           id_dispositivo: device.id_dispositivo,
           isOnline: isOnline,
           lastSeen: device.last_seen,
-          adultos: device.adultos,
+          adultos: device.adulto ? [device.adulto] : [],
         }
       };
     } catch (error) {
