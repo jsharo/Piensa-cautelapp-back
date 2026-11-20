@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { getJwtSecret } from './jwt-secret';
 import { JwtPayload, toAuthenticatedUser } from './auth-user';
+import { SessionService } from './session.service';
 
 /**
  * Guard para SSE que permite JWT desde query params o header.
@@ -14,6 +15,7 @@ export class SseJwtAuthGuard extends AuthGuard('jwt') {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly sessions: SessionService,
   ) {
     super();
   }
@@ -34,6 +36,9 @@ export class SseJwtAuthGuard extends AuthGuard('jwt') {
         });
         if (!current || current.token_version !== authUser.token_version) {
           throw new UnauthorizedException('Token inválido');
+        }
+        if (authUser.sid) {
+          await this.sessions.assertActive(authUser.sid, authUser.id_usuario);
         }
         request.user = authUser;
         return true;

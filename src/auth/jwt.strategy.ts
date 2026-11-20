@@ -4,10 +4,14 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { getJwtSecret } from './jwt-secret';
 import { AuthenticatedUser, JwtPayload, toAuthenticatedUser } from './auth-user';
+import { SessionService } from './session.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sessions: SessionService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -24,6 +28,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       });
       if (!current || current.token_version !== authUser.token_version) {
         throw new UnauthorizedException('Token inválido');
+      }
+      if (authUser.sid) {
+        await this.sessions.assertActive(authUser.sid, authUser.id_usuario);
       }
       return authUser;
     } catch (error) {

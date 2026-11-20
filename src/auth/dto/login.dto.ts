@@ -16,4 +16,9 @@ export class LoginDto {
   @IsOptional()
   @IsBoolean()
   remember?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  dispositivo?: string;
 }

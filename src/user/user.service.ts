@@ -5,11 +5,15 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeEmail } from '../auth/normalize-email';
 import { resolveCuidadorRoleId } from '../auth/cuidador-role';
+import { SessionService } from '../auth/session.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private sessions: SessionService,
+  ) {}
 
   async create(dto: CreateUserDto) {
     const email = normalizeEmail(dto.email);
@@ -102,6 +106,9 @@ export class UserService {
         data,
         include: { rol: true },
       });
+      if (dto.contrasena !== undefined) {
+        await this.sessions.revokeAll(id);
+      }
       return this.toPublicUser(user);
     } catch (error) {
       this.rethrowKnown(error);

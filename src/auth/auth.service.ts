@@ -9,6 +9,7 @@ import { LoginAttemptTracker } from './login-attempt.tracker';
 import { PasswordResetService } from './password-reset.service';
 import { normalizeEmail } from './normalize-email';
 import { resolveCuidadorRoleId } from './cuidador-role';
+import { SessionService } from './session.service';
 
 const SESSION_TTL = '7d';
 const REMEMBER_TTL = '30d';
@@ -33,6 +34,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly passwordReset: PasswordResetService,
     private readonly loginAttempts: LoginAttemptTracker,
+    private readonly sessions: SessionService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -78,12 +80,7 @@ export class AuthService {
     this.loginAttempts.beginAttempt(email);
     let outcome: 'success' | 'failure' | 'cancel' = 'cancel';
     try {
-      const users = await this.prisma.usuario.findMany({
-        where: { email: { equals: email, mode: 'insensitive' } },
-        include: { rol: true },
-        take: 2,
-      });
-      const user = users.length === 1 ? users[0] : null;
+      const user = await this.findLoginUser(email);
       const passwordMatches = await bcrypt.compare(
         dto.contrasena,
         user?.contrasena ?? DUMMY_PASSWORD_HASH,
@@ -94,15 +91,22 @@ export class AuthService {
       }
 
       outcome = 'success';
-      const expiresIn = dto.remember ? REMEMBER_TTL : SESSION_TTL;
+      const remember = dto.remember === true;
+      const expiresIn = remember ? REMEMBER_TTL : SESSION_TTL;
+      const session = await this.sessions.open(user.id_usuario, remember, dto.dispositivo);
       const token = await this.signToken(
         user.id_usuario,
         user.email,
         user.rol?.nombre_rol,
         user.token_version,
         expiresIn,
+        session.id,
       );
-      return { user: this.toPublicUser(user), access_token: token, expires_in: expiresIn };
+      return {
+        user: this.toPublicUser({ ...user, imagen: null }),
+        access_token: token,
+        expires_in: expiresIn,
+      };
     } finally {
       if (outcome === 'success') {
         this.loginAttempts.completeAttempt(email, true);
@@ -112,6 +116,10 @@ export class AuthService {
         this.loginAttempts.cancelAttempt(email);
       }
     }
+  }
+
+  logout(userId: number, sessionId?: string) {
+    return this.sessions.revoke(userId, sessionId);
   }
 
   async me(userId: number) {
@@ -137,14 +145,46 @@ export class AuthService {
     return this.passwordReset.resetPassword(email, code, newPassword);
   }
 
+  private async findLoginUser(email: string) {
+    const select = {
+      id_usuario: true,
+      nombre: true,
+      email: true,
+      email_recuperacion: true,
+      contrasena: true,
+      id_rol: true,
+      token_version: true,
+      created_at: true,
+      updated_at: true,
+      rol: { select: { id_rol: true, nombre_rol: true, descripcion: true } },
+    } as const;
+    const exact = await this.prisma.usuario.findUnique({ where: { email }, select });
+    if (exact) {
+      return exact;
+    }
+    const matches = await this.prisma.usuario.findMany({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select,
+      take: 2,
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   private async signToken(
     sub: number,
     email: string,
     role: string | undefined,
     tokenVersion: number,
     expiresIn: string,
+    sessionId?: string,
   ) {
-    const payload = { id_usuario: sub, email, role, tv: tokenVersion };
+    const payload = {
+      id_usuario: sub,
+      email,
+      role,
+      tv: tokenVersion,
+      ...(sessionId ? { sid: sessionId } : {}),
+    };
     const options: JwtSignOptions = { expiresIn: expiresIn as JwtSignOptions['expiresIn'] };
     return this.jwt.signAsync(payload, options);
   }

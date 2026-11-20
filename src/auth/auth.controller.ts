@@ -23,6 +23,15 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  logout(@Req() req: { user?: AuthenticatedUser }) {
+    if (!req.user?.id_usuario) {
+      throw new UnauthorizedException('Token inválido');
+    }
+    return this.auth.logout(req.user.id_usuario, req.user.sid);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@Req() req: { user?: AuthenticatedUser }) {
     if (!req.user?.id_usuario) {

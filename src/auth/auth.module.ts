@@ -7,6 +7,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { EmailModule } from '../email/email.module';
 import { PasswordResetService } from './password-reset.service';
 import { LoginAttemptTracker } from './login-attempt.tracker';
+import { SessionService } from './session.service';
 import { getJwtSecret } from './jwt-secret';
 
 @Module({
@@ -19,7 +20,7 @@ import { getJwtSecret } from './jwt-secret';
     EmailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PasswordResetService, LoginAttemptTracker],
-  exports: [AuthService, JwtModule],
+  providers: [AuthService, JwtStrategy, PasswordResetService, LoginAttemptTracker, SessionService],
+  exports: [AuthService, JwtModule, SessionService],
 })
 export class AuthModule {}

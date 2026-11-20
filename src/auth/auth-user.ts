@@ -3,6 +3,7 @@ export interface AuthenticatedUser {
   email: string;
   role?: string;
   token_version: number;
+  sid?: string;
 }
 
 export interface JwtPayload {
@@ -11,6 +12,7 @@ export interface JwtPayload {
   email?: unknown;
   role?: unknown;
   tv?: unknown;
+  sid?: unknown;
 }
 
 export function toAuthenticatedUser(payload: JwtPayload): AuthenticatedUser {
@@ -25,10 +27,12 @@ export function toAuthenticatedUser(payload: JwtPayload): AuthenticatedUser {
   const token_version = typeof payload.tv === 'number' && Number.isInteger(payload.tv) && payload.tv >= 0
     ? payload.tv
     : 0;
+  const sid = typeof payload.sid === 'string' && payload.sid.length > 0 ? payload.sid : undefined;
   return {
     id_usuario,
     email: payload.email,
     role: typeof payload.role === 'string' ? payload.role : undefined,
     token_version,
+    sid,
   };
 }

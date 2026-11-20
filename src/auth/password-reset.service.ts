@@ -7,6 +7,7 @@ import { PASSWORD_RESET_MAILER } from '../email/password-reset-mailer';
 import type { PasswordResetMailer } from '../email/password-reset-mailer';
 import { normalizeEmail } from './normalize-email';
 import { getJwtSecret } from './jwt-secret';
+import { SessionService } from './session.service';
 
 const CODE_TTL_MS = 15 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -26,6 +27,7 @@ export class PasswordResetService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PASSWORD_RESET_MAILER) private readonly mailer: PasswordResetMailer,
+    private readonly sessions: SessionService,
   ) {}
 
   async requestCode(email: string): Promise<{ message: string }> {
@@ -132,6 +134,7 @@ export class PasswordResetService {
           token_version: { increment: 1 },
         },
       });
+      await this.sessions.revokeAll(users[0].id_usuario, tx);
       return true;
     });
 

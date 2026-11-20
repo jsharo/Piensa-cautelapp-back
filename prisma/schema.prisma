@@ -28,6 +28,7 @@ model Usuario {
   usuariosAdultoMayor    UsuarioAdultoMayor[]
   sharedGroupMemberships SharedGroupMember[]
   alertasAtendidas       Notificaciones[] @relation("AlertasAtendidas")
+  sesiones               Sesion[]
 
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
@@ -143,6 +144,23 @@ model PasswordReset {
   attempts  Int      @default(0)
 
   @@map("PasswordReset")
+}
+
+model Sesion {
+  id                String    @id @default(uuid())
+  id_usuario        Int
+  clave_dispositivo String
+  recordar          Boolean   @default(false)
+  expira_en         DateTime
+  revocada_en       DateTime?
+  ultimo_acceso     DateTime  @default(now())
+  created_at        DateTime  @default(now())
+
+  usuario Usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade)
+
+  @@unique([id_usuario, clave_dispositivo])
+  @@index([id_usuario, revocada_en])
+  @@map("Sesion")
 }
 
 // --- GESTIÓN DE GRUPOS COMPARTIDOS (Se mantiene intacto y funcional) ---
