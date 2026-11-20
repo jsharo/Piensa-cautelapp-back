@@ -352,7 +352,7 @@ bool notifyBackend() {
   }
 
   HTTPClient http;
-  String url = "https://piensa-cautelapp-back-0nh6.onrender.com/api/device/esp32/connection";
+  String url = "https://piensa-cautelapp-back.onrender.com/api/device/esp32/connection";
 
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
@@ -383,7 +383,7 @@ bool sendMaxData() {
   }
 
   HTTPClient http;
-  String url = "https://piensa-cautelapp-back-0nh6.onrender.com/api/device/esp32/sensor-data/max";
+  String url = "https://piensa-cautelapp-back.onrender.com/api/device/esp32/sensor-data/max";
 
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
@@ -424,7 +424,7 @@ bool sendFallAlert(float acceleration) {
   }
 
   HTTPClient http;
-  String url = "https://piensa-cautelapp-back-0nh6.onrender.com/api/device/esp32/sensor-data/mpu-alert";
+  String url = "https://piensa-cautelapp-back.onrender.com/api/device/esp32/sensor-data/mpu-alert";
 
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
@@ -462,7 +462,7 @@ bool sendButtonAlert() {
   }
 
   HTTPClient http;
-  String url = "https://piensa-cautelapp-back-0nh6.onrender.com/api/device/esp32/sensor-data/button-alert";
+  String url = "https://piensa-cautelapp-back.onrender.com/api/device/esp32/sensor-data/button-alert";
 
   http.begin(url);
   http.addHeader("Content-Type", "application/json");

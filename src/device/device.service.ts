@@ -275,14 +275,66 @@ export class DeviceService {
    * Permite a un usuario dejar de monitorear un dispositivo
    * Valida que el usuario sea propietario del dispositivo antes de eliminarlo
    */
+  private forgetDeviceRuntime(deviceId: string) {
+    const beat = this.deviceHeartbeats.get(deviceId);
+    if (beat?.timeoutId) {
+      clearTimeout(beat.timeoutId);
+    }
+    this.deviceHeartbeats.delete(deviceId);
+    this.connectedDevices.delete(deviceId);
+  }
+
+  private clearPulseForUsers(userIds: Iterable<number>, nombre: string) {
+    for (const userId of userIds) {
+      this.deviceEventsService.emitNotification({
+        id_notificacion: 0,
+        userId,
+        tipo: 'BPM_UPDATE',
+        usuario: nombre,
+        fecha_hora: new Date().toISOString(),
+        pulso: null,
+      });
+    }
+  }
+
+  private async purgeAdultAndDevice(adultoId: number, deviceId: string | null) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.notificaciones.deleteMany({ where: { id_adulto: adultoId } });
+      await tx.sharedGroupDevice.deleteMany({ where: { adulto_id: adultoId } });
+      await tx.usuarioAdultoMayor.deleteMany({ where: { id_adulto: adultoId } });
+      await tx.adultoMayor.delete({ where: { id_adulto: adultoId } });
+
+      if (!deviceId) {
+        return;
+      }
+
+      const otrosAdultos = await tx.adultoMayor.count({
+        where: { id_dispositivo: deviceId },
+      });
+      if (otrosAdultos === 0) {
+        await tx.dispositivo.delete({ where: { id_dispositivo: deviceId } });
+      }
+    });
+
+    if (deviceId) {
+      this.forgetDeviceRuntime(deviceId);
+    }
+  }
+
   async stopMonitoringDevice(userId: number, deviceId: number) {
     try {
       console.log(`[STOP_MONITORING] Iniciando eliminación para usuario ${userId}, adulto ${deviceId}`);
 
-      // Verificar que el usuario es propietario del dispositivo
       const adultoMayor = await this.prisma.adultoMayor.findUnique({
         where: { id_adulto: deviceId },
-        include: { dispositivo: true }
+        include: {
+          usuariosAdultoMayor: { select: { id_usuario: true } },
+          sharedInGroups: {
+            include: {
+              group: { include: { members: { select: { user_id: true } } } },
+            },
+          },
+        },
       });
 
       if (!adultoMayor) {
@@ -290,90 +342,45 @@ export class DeviceService {
         throw new NotFoundException('Dispositivo no encontrado');
       }
 
-      console.log(`[STOP_MONITORING] AdultoMayor encontrado:`, {
-        id_adulto: adultoMayor.id_adulto,
-        nombre: adultoMayor.nombre,
-        id_dispositivo: adultoMayor.id_dispositivo
-      });
-
-      // Verificar la relación usuario-adulto
-      const relacion = await this.prisma.usuarioAdultoMayor.findUnique({
-        where: {
-          id_usuario_id_adulto: {
-            id_usuario: userId,
-            id_adulto: deviceId,
-          },
-        },
-      });
-
-      if (!relacion) {
+      const esDueno = adultoMayor.usuariosAdultoMayor.some((relacion) => relacion.id_usuario === userId);
+      if (!esDueno) {
         console.error(`[STOP_MONITORING] Usuario ${userId} no tiene relación con adulto ${deviceId}`);
         throw new ForbiddenException('No tienes permiso para dejar de monitorear este dispositivo');
       }
 
-      console.log(`[STOP_MONITORING] Relación usuario-adulto verificada. Eliminando...`);
-
-      // Eliminar la relación usuario-adulto mayor
-      await this.prisma.usuarioAdultoMayor.delete({
-        where: {
-          id_usuario_id_adulto: {
-            id_usuario: userId,
-            id_adulto: deviceId,
+      const otrosDuenos = adultoMayor.usuariosAdultoMayor.filter((relacion) => relacion.id_usuario !== userId);
+      if (otrosDuenos.length > 0) {
+        await this.prisma.usuarioAdultoMayor.delete({
+          where: {
+            id_usuario_id_adulto: {
+              id_usuario: userId,
+              id_adulto: deviceId,
+            },
           },
-        },
-      });
-      console.log(`[STOP_MONITORING] ✓ Relación UsuarioAdultoMayor eliminada`);
-
-      // Verificar si el adulto mayor tiene otras relaciones con otros usuarios
-      const otrasRelaciones = await this.prisma.usuarioAdultoMayor.findMany({
-        where: { id_adulto: deviceId },
-      });
-
-      console.log(`[STOP_MONITORING] Otras relaciones del adulto: ${otrasRelaciones.length}`);
-
-      // Si no hay otras relaciones, eliminar el adulto mayor y el dispositivo
-      if (otrasRelaciones.length === 0) {
-        const dispositivo = adultoMayor.id_dispositivo;
-        
-        console.log(`[STOP_MONITORING] Sin otras relaciones, eliminando AdultoMayor...`);
-
-        // Eliminar el adulto mayor
-        await this.prisma.adultoMayor.delete({
-          where: { id_adulto: deviceId },
         });
-        console.log(`[STOP_MONITORING] ✓ AdultoMayor ${deviceId} eliminado`);
-
-        // Eliminar el dispositivo si no tiene otros adultos mayores vinculados
-        if (dispositivo) {
-          console.log(`[STOP_MONITORING] Verificando si dispositivo ${dispositivo} tiene otros adultos...`);
-          const otrosAdultos = await this.prisma.adultoMayor.findMany({
-            where: { id_dispositivo: dispositivo },
-          });
-
-          console.log(`[STOP_MONITORING] Otros adultos en dispositivo: ${otrosAdultos.length}`);
-
-          if (otrosAdultos.length === 0) {
-            console.log(`[STOP_MONITORING] Eliminando Dispositivo ${dispositivo}...`);
-            await this.prisma.dispositivo.delete({
-              where: { id_dispositivo: dispositivo },
-            });
-            console.log(`[STOP_MONITORING] ✓ Dispositivo ${dispositivo} eliminado`);
-          } else {
-            console.log(`[STOP_MONITORING] Dispositivo ${dispositivo} no eliminado (aún tiene adultos)`);
-          }
-        }
-      } else {
-        console.log(`[STOP_MONITORING] Adulto ${deviceId} NO eliminado (otras relaciones existen)`);
+        this.clearPulseForUsers([userId], adultoMayor.nombre);
+        console.log(`[STOP_MONITORING] Usuario ${userId} dejó de monitorear al adulto ${deviceId}`);
+        return { success: true, message: 'Dejaste de monitorear este dispositivo' };
       }
 
-      console.log(`[STOP_MONITORING] ✓ Proceso completado exitosamente`);
+      const afectados = new Set<number>([userId]);
+      adultoMayor.sharedInGroups.forEach((shared) => {
+        shared.group.members.forEach((member) => afectados.add(member.user_id));
+      });
+
+      await this.purgeAdultAndDevice(adultoMayor.id_adulto, adultoMayor.id_dispositivo);
+      this.clearPulseForUsers(afectados, adultoMayor.nombre);
+      console.log(`[STOP_MONITORING] ✓ Adulto ${deviceId} y su dispositivo eliminados`);
       return { success: true, message: 'Dispositivo eliminado completamente' };
     } catch (error: any) {
       console.error(`[STOP_MONITORING] ✗ Error en eliminación:`, error);
       if (error.code === 'P2025') {
         throw new NotFoundException('Dispositivo o relación no encontrada');
       }
-      if (error instanceof ForbiddenException || error instanceof NotFoundException) {
+      if (error.code === 'P2003') {
+        throw new ConflictException('No se puede eliminar el dispositivo porque sigue vinculado a otros registros.');
+      }
+      if (error instanceof ForbiddenException || error instanceof NotFoundException || error instanceof ConflictException) {
         throw error;
       }
       throw error;
@@ -927,6 +934,20 @@ export class DeviceService {
             }
           });
         });
+
+        if (ownerIds.size === 0 && groupMemberIds.size === 0) {
+          console.log(`[ESP32-MAX] Dispositivo ${dto.deviceId} quedó sin cuidadores. Eliminando el registro huérfano.`);
+          const rememberedUserId = Number(this.connectedDevices.get(dispositivo.id_dispositivo)?.userId);
+          await this.purgeAdultAndDevice(adultoMayor.id_adulto, dispositivo.id_dispositivo);
+          if (Number.isInteger(rememberedUserId) && rememberedUserId > 0) {
+            this.clearPulseForUsers([rememberedUserId], adultoMayor.nombre);
+          }
+          return {
+            success: true,
+            message: 'El dispositivo ya no tenía cuidadores y fue eliminado.',
+            deviceId: dto.deviceId,
+          };
+        }
 
         totalUsers = ownerIds.size + groupMemberIds.size;
         console.log(`[ESP32-MAX] 📊 Enviando BPM ${dto.max_avg_bpm} a ${totalUsers} usuario(s) (${ownerIds.size} owners, ${groupMemberIds.size} miembros)`);

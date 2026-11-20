@@ -25,7 +25,7 @@ export interface NotificationEvent {
   usuario: string;
   mensaje?: string;  // ⭐ CAMBIO: Hacer opcional para permitir null
   fecha_hora: string;
-  pulso?: number;
+  pulso?: number | null;
 }
 
 @Injectable()
